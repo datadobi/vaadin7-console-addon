@@ -1,10 +1,10 @@
-package org.vaadin7.console;
+package org.vaadin8.console;
 
 import java.util.HashSet;
 import java.util.Set;
 
-import org.vaadin7.console.Console.Command;
-import org.vaadin7.console.Console.Handler;
+import org.vaadin8.console.Console.Command;
+import org.vaadin8.console.Console.Handler;
 
 /**
  * Default handler for console.

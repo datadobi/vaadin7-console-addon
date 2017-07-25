@@ -1,4 +1,4 @@
-package org.vaadin7.console.ansi;
+package org.vaadin8.console.ansi;
 
 /**
  * Interface for ANSI-code-TO-CSS converter.

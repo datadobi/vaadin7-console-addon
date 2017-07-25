@@ -1,4 +1,4 @@
-package org.vaadin7.console.ansi;
+package org.vaadin8.console.ansi;
 
 import java.util.HashMap;
 import java.util.Map;

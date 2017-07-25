@@ -1,9 +1,8 @@
-package org.vaadin7.console.client;
+package org.vaadin8.console.client;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import com.google.gwt.core.client.GWT;
 import com.google.gwt.dom.client.DivElement;
 import com.google.gwt.dom.client.Document;
 import com.google.gwt.dom.client.Element;

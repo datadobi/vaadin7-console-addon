@@ -1,25 +1,15 @@
-package org.vaadin7.console;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintStream;
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.regex.Pattern;
-
-import org.vaadin7.console.ansi.ANSICodeConverter;
-import org.vaadin7.console.ansi.DefaultANSICodeConverter;
-import org.vaadin7.console.client.ConsoleClientRpc;
-import org.vaadin7.console.client.ConsoleServerRpc;
-import org.vaadin7.console.client.ConsoleState;
+package org.vaadin8.console;
 
 import com.vaadin.ui.Component;
+import org.vaadin8.console.ansi.ANSICodeConverter;
+import org.vaadin8.console.ansi.DefaultANSICodeConverter;
+import org.vaadin8.console.client.ConsoleClientRpc;
+import org.vaadin8.console.client.ConsoleServerRpc;
+import org.vaadin8.console.client.ConsoleState;
+
+import java.io.*;
+import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * This is the server-side UI component that provides public API for Console.
@@ -75,7 +65,6 @@ public class Console extends com.vaadin.ui.AbstractComponent implements Componen
 	}
 
 	public Console() {
-		setImmediate(true);
 		setHandler(new DefaultConsoleHandler());
 		setANSIToCSSConverter(new DefaultANSICodeConverter());
 		// To receive events from the client, we register ServerRpc

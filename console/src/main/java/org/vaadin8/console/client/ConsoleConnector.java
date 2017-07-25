@@ -1,6 +1,6 @@
-package org.vaadin7.console.client;
+package org.vaadin8.console.client;
 
-import org.vaadin7.console.Console;
+import org.vaadin8.console.Console;
 
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.event.dom.client.FocusEvent;

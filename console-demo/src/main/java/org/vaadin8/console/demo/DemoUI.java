@@ -1,5 +1,19 @@
-package org.vaadin7.console.demo;
+package org.vaadin8.console.demo;
 
+import com.vaadin.annotations.Theme;
+import com.vaadin.annotations.Title;
+import com.vaadin.annotations.VaadinServletConfiguration;
+import com.vaadin.server.VaadinRequest;
+import com.vaadin.server.VaadinServlet;
+import com.vaadin.shared.ui.ContentMode;
+import com.vaadin.ui.*;
+import com.vaadin.ui.Button.ClickEvent;
+import org.vaadin8.console.Console;
+import org.vaadin8.console.Console.Command;
+import org.vaadin8.console.Console.CommandProvider;
+import org.vaadin8.console.ObjectInspector;
+
+import javax.servlet.annotation.WebServlet;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -10,28 +24,6 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.Set;
 
-import javax.servlet.annotation.WebServlet;
-
-import org.vaadin7.console.Console;
-import org.vaadin7.console.Console.Command;
-import org.vaadin7.console.Console.CommandProvider;
-import org.vaadin7.console.ObjectInspector;
-
-import com.vaadin.annotations.Theme;
-import com.vaadin.annotations.Title;
-import com.vaadin.annotations.VaadinServletConfiguration;
-import com.vaadin.server.VaadinRequest;
-import com.vaadin.server.VaadinServlet;
-import com.vaadin.shared.ui.label.ContentMode;
-import com.vaadin.ui.Button;
-import com.vaadin.ui.Button.ClickEvent;
-import com.vaadin.ui.HorizontalLayout;
-import com.vaadin.ui.Label;
-import com.vaadin.ui.TabSheet;
-import com.vaadin.ui.TextField;
-import com.vaadin.ui.UI;
-import com.vaadin.ui.VerticalLayout;
-
 @Theme("demo")
 @Title("Console Add-on Demo")
 @SuppressWarnings("serial")
@@ -41,7 +33,7 @@ public class DemoUI extends UI {
 	private ObjectInspector inspector;
 
 	@WebServlet(value = "/*", asyncSupported = true)
-	@VaadinServletConfiguration(productionMode = false, ui = DemoUI.class, widgetset = "org.vaadin7.console.demo.DemoWidgetSet")
+	@VaadinServletConfiguration(productionMode = false, ui = DemoUI.class, widgetset = "org.vaadin8.console.demo.DemoWidgetSet")
 	public static class Servlet extends VaadinServlet {
 	}
 
@@ -66,7 +58,6 @@ public class DemoUI extends UI {
 
 		// Create a console
 		final Console console = new Console();
-		console.setImmediate(true);
 		vl1.addComponent(console);
 
 		// Size and greeting
@@ -176,7 +167,6 @@ public class DemoUI extends UI {
 		ts.addTab(vl2, "Chat");
 
 		Console chat = new Console();
-		chat.setImmediate(true);
 		chat.addStyleName("chat");
 		chat.setSizeFull();
 		chat.setMaxBufferSize(400);

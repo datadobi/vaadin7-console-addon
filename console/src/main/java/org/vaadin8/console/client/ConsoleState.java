@@ -1,4 +1,4 @@
-package org.vaadin7.console.client;
+package org.vaadin8.console.client;
 
 /**
  * @author indvdum (gotoindvdum[at]gmail[dot]com)

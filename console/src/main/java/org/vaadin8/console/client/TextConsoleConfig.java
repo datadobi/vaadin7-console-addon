@@ -1,4 +1,4 @@
-package org.vaadin7.console.client;
+package org.vaadin8.console.client;
 
 import com.google.gwt.core.client.JavaScriptObject;
 

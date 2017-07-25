@@ -1,4 +1,4 @@
-package org.vaadin7.console;
+package org.vaadin8.console;
 
 import junit.framework.Assert;
 import org.junit.Test;

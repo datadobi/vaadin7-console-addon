@@ -1,36 +1,31 @@
-# Console Add-on for Vaadin 7
+# Console Add-on for Vaadin 8
 
-Port of Console addon to Vaadin 7.
+Port of Console addon to Vaadin 8.
 
 https://vaadin.com/directory#!addon/console
 
 ## Online demo
 
-Try the add-on demo at <http://indvd00m.com/console-demo>
+Try the add-on demo at <http://indvd00m.com/console-demo> (version for Vaadin 7)
 
 ## Using
-Add maven repository to your POM:
-
-	<repository>
-		<id>indvd00m-github-repo</id>
-		<url>https://github.com/indvd00m/maven-repo/raw/master/repository</url>
-	</repository>
+Compile and install the Maven build.
 
 Add dependency to your project:
 
 	<dependency>
-		<groupId>org.vaadin7.addons</groupId>
+		<groupId>org.vaadin8.addons</groupId>
 		<artifactId>console</artifactId>
-		<version>1.3.0</version>
+		<version>1.4.0-SNAPSHOT</version>
 	</dependency>
 
 ## Download release
 
-https://github.com/indvd00m/vaadin7-console-addon/releases
+https://github.com/pwilkin/vaadin7-console-addon/releases
 
 ## Building and running demo
 ```
-git clone https://github.com/indvd00m/vaadin7-console-addon/
+git clone https://github.com/pwilkin/vaadin7-console-addon/
 cd vaadin7-console-addon
 mvn clean install
 cd console-demo
@@ -70,9 +65,11 @@ To debug project and make code modifications on the fly in the server-side, righ
 The most common way of debugging and making changes to the client-side code is dev-mode. To create debug configuration for it, open console-demo project properties and click "Create Development Mode Launch" button on the Vaadin tab. Right-click newly added "GWT development mode for console-demo.launch" and choose Debug As > Debug Configurations... Open up Classpath tab for the development mode configuration and choose User Entries. Click Advanced... and select Add Folders. Choose Java and Resources under console/src/main and click ok. Now you are ready to start debugging the client-side code by clicking debug. Click Launch Default Browser button in the GWT Development Mode in the launched application. Now you can modify and breakpoints to client-side classes and see changes by reloading the web page. 
 
 Another way of debugging client-side is superdev mode. To enable it, uncomment devModeRedirectEnabled line from the end of DemoWidgetSet.gwt.xml located under console-demo resources folder and compile the widgetset once by running vaadin:compile Maven target for console-demo. Refresh console-demo project resources by right clicking the project and choosing Refresh. Click "Create SuperDevMode Launch" button on the Vaadin tab of the console-demo project properties panel to create superder mode code server launch configuration and modify the class path as instructed above. After starting the code server by running SuperDevMode launch as Java application, you can navigate to http://localhost:8080/console-demo/?superdevmode. Now all code changes you do to your client side will get compiled as soon as you reload the web page. You can also access Java-sources and set breakpoints inside Chrome if you enable source maps from inspector settings. 
-
  
 ## Release notes
+
+### Version 1.4.0
+- First release for Vaadin 8
 
 ### Version 1.3.0
 - First release for Vaadin 7
@@ -102,3 +99,4 @@ Add-on is distributed under Apache License 2.0. For license terms, see LICENSE.t
 
 Console is written by Sami Ekblad.
 Port to Vaadin 7 is written by David E. Veliev.
+Port to Vaadin 8 is written by Piotr Wilkin.

@@ -1,4 +1,4 @@
-package org.vaadin7.console;
+package org.vaadin8.console;
 
 import java.beans.BeanInfo;
 import java.beans.Introspector;
@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.vaadin7.console.Console.Command;
+import org.vaadin8.console.Console.Command;
 
 import com.vaadin.ui.Component;
 
