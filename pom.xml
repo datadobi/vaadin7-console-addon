@@ -5,7 +5,7 @@
 	<groupId>com.datadobi</groupId>
 	<artifactId>console-root</artifactId>
 	<packaging>pom</packaging>
-	<version>1.4.1</version>
+	<version>1.4.2-SNAPSHOT</version>
 	<name>Console Add-on Root Project</name>
 
 	<modules>
