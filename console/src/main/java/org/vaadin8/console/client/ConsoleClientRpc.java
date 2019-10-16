@@ -22,6 +22,10 @@ public interface ConsoleClientRpc extends ClientRpc {
 
 	public void setCols(int cols);
 
+	public void setWidth(int width);
+
+	public void setHeight(int height);
+
 	public void print(String text);
 
 	public void printWithClass(String text, String className);

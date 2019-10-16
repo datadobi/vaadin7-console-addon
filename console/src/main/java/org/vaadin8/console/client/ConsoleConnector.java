@@ -65,6 +65,16 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			}
 
 			@Override
+			public void setWidth(int width) {
+				getWidget().setWidth(width + "px");
+			}
+
+			@Override
+			public void setHeight(int height) {
+				getWidget().setHeight(height + "px");
+			}
+
+			@Override
 			public void print(String text) {
 				getWidget().print(text);
 			}
@@ -257,5 +267,4 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 		// GWT.log("heightChanged to " + getState().height);
 		getWidget().setHeight(getState().height);
 	}
-
 }

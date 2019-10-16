@@ -1,6 +1,11 @@
 package org.vaadin8.console;
 
+import com.vaadin.server.Page;
+import com.vaadin.shared.Registration;
+import com.vaadin.ui.AbstractComponent;
 import com.vaadin.ui.Component;
+import com.vaadin.ui.JavaScript;
+import com.vaadin.ui.JavaScriptFunction;
 import org.vaadin8.console.ansi.ANSICodeConverter;
 import org.vaadin8.console.ansi.DefaultANSICodeConverter;
 import org.vaadin8.console.client.ConsoleClientRpc;
@@ -19,7 +24,7 @@ import java.util.regex.Pattern;
  * @since 22.05.2014 17:30:06
  * 
  */
-public class Console extends com.vaadin.ui.AbstractComponent implements Component.Focusable {
+public class Console extends AbstractComponent implements Component.Focusable, Page.BrowserWindowResizeListener {
 
 	private Console console = this;
 
@@ -161,6 +166,47 @@ public class Console extends com.vaadin.ui.AbstractComponent implements Componen
 	private PrintStream printStream;
 	private String lastSuggestInput;
 	private List<CommandProvider> commandProviders;
+
+	private Registration registration;
+
+	@Override
+	public void attach()
+	{
+		super.attach();
+		registration = Page.getCurrent().addBrowserWindowResizeListener(this);
+		if (getParent().getId() == null) {
+			getParent().setId("console-container");
+		}
+		onResize();
+	}
+
+	@Override
+	public void detach()
+	{
+		if (registration != null) {
+			registration.remove();;
+		}
+		super.detach();
+	}
+
+	private void onResize()
+	{
+		JavaScript.getCurrent().addFunction("getContainerSize",
+				(JavaScriptFunction) args -> {
+					int width = (int) args.getNumber(0);
+					int height = (int) args.getNumber(1);
+					getRpcProxy(ConsoleClientRpc.class).setWidth(width);
+					getRpcProxy(ConsoleClientRpc.class).setHeight(height);
+				});
+		String id = getParent().getId();
+		JavaScript.getCurrent().execute("getContainerSize(document.getElementById('" + id + "').clientWidth,document.getElementById('" + id + "').clientHeight);");
+	}
+
+	@Override
+	public void browserWindowResized(Page.BrowserWindowResizeEvent event)
+	{
+		onResize();
+	}
 
 	/**
 	 * An inner class for holding the configuration data.
@@ -307,7 +353,6 @@ public class Console extends com.vaadin.ui.AbstractComponent implements Componen
 
 	/**
 	 * Overridden to filter client-side calculation/changes and avoid loops.
-	 * 
 	 */
 	@Override
 	public void setWidth(float width, Unit unit) {
@@ -319,7 +364,6 @@ public class Console extends com.vaadin.ui.AbstractComponent implements Componen
 
 	/**
 	 * Overridden to filter client-side calculation/changes and avoid loops.
-	 * 
 	 */
 	@Override
 	public void setHeight(float height, Unit unit) {

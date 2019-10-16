@@ -20,5 +20,4 @@ public class ConsoleWidget extends TextConsole {
 		getElement().addClassName(CSS_CLASS_NAME);
 		getConfig().setScrolledToEnd(true);
 	}
-
 }
