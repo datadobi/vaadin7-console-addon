@@ -360,6 +360,16 @@ public class ObjectInspector implements Serializable, Console.CommandProvider {
 			return null;
 		}
 
+		@Override
+		public void kill() {
+
+		}
+
+		@Override
+		public boolean isKilled() {
+			return false;
+		}
+
 		public String getUsage(final Console console, final String[] argv) {
 			return null;
 		}

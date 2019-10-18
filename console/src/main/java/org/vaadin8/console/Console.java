@@ -62,6 +62,14 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		public void suggest(String input) {
 			handleSuggest(input);
 		}
+
+		@Override
+		public void kill() {
+			handleKill();
+		}
+
+		@Override
+		public void pong() { handlePong(); }
 	};
 
 	public Console(final Console.Handler handler) {
@@ -97,6 +105,7 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 	private ANSICodeConverter ansiToCSSconverter;
 	private boolean isConvertANSIToCSS = false;
 	private final HashMap<String, Command> commands = new HashMap<String, Command>();
+	private Command lastCommand;
 	private final Config config = new Config();
 
 	private static final String DEFAULT_PS = "}> ";
@@ -255,6 +264,13 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		void inputReceived(Console console, String lastInput);
 
 		/**
+		 * Called when a user has pressed CTRL+C.
+		 *
+		 * @param console
+		 */
+		void killReceived(Console console);
+
+		/**
 		 * Handle an exception during a Command execution.
 		 * 
 		 * @param console
@@ -292,6 +308,17 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		 * @throws Exception
 		 */
 		public Object execute(Console console, String[] argv) throws Exception;
+
+		/**
+		 * Abort a running command.
+		 */
+		public void kill();
+
+		/**
+		 *
+		 * @return
+		 */
+		public boolean isKilled();
 
 		/**
 		 * Get usage information about this command.
@@ -373,7 +400,7 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		}
 	}
 
-	protected void handleSuggest(final String input) {
+	private void handleSuggest(final String input) {
 
 		final boolean cancelIfNotASingleMatch = (input != null && !input.equals(lastSuggestInput));
 		lastSuggestInput = input;
@@ -404,7 +431,7 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 					if (c == 0) {
 						c = m.charAt(i);
 					} else if (i < m.length()) {
-						charMatch &= m.charAt(i) == c;
+						charMatch = m.charAt(i) == c;
 						if (!charMatch) {
 							break;
 						}
@@ -419,9 +446,9 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 			}
 			output += commonPrefix.toString();
 			if (prefix.equals(commonPrefix.toString()) && !cancelIfNotASingleMatch) {
-				final StringBuffer suggestions = new StringBuffer("\n");
+				final StringBuilder suggestions = new StringBuilder("\n");
 				for (final String m : matches) {
-					suggestions.append(" " + m);
+					suggestions.append(" ").append(m);
 				}
 				print(suggestions.toString());
 			} else {
@@ -438,55 +465,82 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		getRpcProxy(ConsoleClientRpc.class).bell();
 	}
 
-	protected void handleInput(final String input) {
+	private void handleInput(final String input) {
 
 		// Ask registered handler
 		handler.inputReceived(this, input);
-
 	}
 
-	protected void parseAndExecuteCommand(final String input) {
+	private void handleKill() {
+
+		handler.killReceived(this);
+	}
+
+	private void handlePong() {
+		// invoked in separate thread, so use sleep instead of scheduling
+		try { Thread.sleep(500); } catch (InterruptedException e) { /* ignore */ }
+		ping();
+	}
+
+	Command parseAndExecuteCommand(final String input) {
 		final String[] argv = parseInput(input);
-		if (argv != null && argv.length > 0) {
+		if (argv.length > 0) {
 			final Command c = getCommand(argv[0]);
 			if (c != null) {
 				final String result = executeCommand(c, argv);
 				if (result != null) {
+					System.out.println("# result: " + result);
 					print(result);
 				}
 			} else {
 				handler.commandNotFound(this, argv);
 			}
+			return c;
 		}
+		return null;
 	}
 
-	protected String executeCommand(final Command cmd, final String[] argv) {
+	private String executeCommand(final Command cmd, final String[] argv) {
+		System.out.println("# executing command");
 		try {
+			lastCommand = cmd;
 			final Object r = cmd.execute(this, argv);
+			lastCommand = null;
+			System.out.println("# executed");
 			return r != null ? "" + r : null;
 		} catch (final Exception e) {
+			System.out.println("# excepted");
 			handler.handleException(this, e, cmd, argv);
 		}
 		return null;
 	}
 
-	protected String parseCommandPrefix(final String input) {
+	void abortLastCommand() {
+		System.out.println("# aborting last command");
+		if (lastCommand != null) {
+			lastCommand.kill();
+			lastCommand = null;
+			print("[aborted]");
+		}
+	}
+
+	String parseCommandPrefix(final String input) {
 		if (input == null) {
 			return null;
 		}
 		if (!input.endsWith(" ")) {
 			final String[] argv = parseInput(input);
-			if (argv != null && argv.length > 0) {
+			if (argv.length > 0) {
 				return argv[argv.length - 1];
 			}
 		}
 		return "";
 	}
 
-	protected static String[] parseInput(final String input) {
+	private static String[] parseInput(final String input) {
 		if (input != null && !"".equals(input.trim())) {
 			final String[] temp = input.split(" ");
-			if (temp != null && temp.length > 0) {
+			if (temp.length > 0) {
 				final List<String> parsed = new ArrayList<String>(temp.length);
 				String current = null;
 				for (final String element : temp) {
@@ -535,8 +589,10 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		if (isConvertANSIToCSS) {
 			getRpcProxy(ConsoleClientRpc.class).print("");
 			appendWithProcessingANSICodes(output);
-		} else
+		} else {
+			System.out.println("# print");
 			getRpcProxy(ConsoleClientRpc.class).print(output);
+		}
 	}
 
 	/**
@@ -611,7 +667,13 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		getRpcProxy(ConsoleClientRpc.class).setCols(config.cols);
 	}
 
+	public void ping() {
+		System.out.println("# ping");
+		getRpcProxy(ConsoleClientRpc.class).ping();
+	}
+
 	public void prompt() {
+		System.out.println("# prompt");
 		getRpcProxy(ConsoleClientRpc.class).prompt();
 	}
 

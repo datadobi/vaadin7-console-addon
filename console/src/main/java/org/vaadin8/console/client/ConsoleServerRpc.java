@@ -23,4 +23,7 @@ public interface ConsoleServerRpc extends ServerRpc {
 
 	public void suggest(String input);
 
+	public void kill();
+
+	public void pong();
 }

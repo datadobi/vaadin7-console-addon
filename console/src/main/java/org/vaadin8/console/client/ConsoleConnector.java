@@ -105,6 +105,9 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			}
 
 			@Override
+			public void ping() { getWidget().ping(); }
+
+			@Override
 			public void prompt() {
 				getWidget().prompt();
 			}
@@ -197,6 +200,15 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			@Override
 			public void suggest(String input) {
 				rpc.suggest(input);
+			}
+
+			@Override
+			public void kill() {
+				rpc.kill();
+			}
+
+			public void pong() {
+				rpc.pong();
 			}
 
 			@Override

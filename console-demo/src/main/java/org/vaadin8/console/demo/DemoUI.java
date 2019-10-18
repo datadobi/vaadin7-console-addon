@@ -44,8 +44,6 @@ public class DemoUI extends UI {
 
 		// Size and greeting
 		console.setPs("> ");
-//		console.setCols(80);
-//		console.setRows(24);
 		console.setMaxBufferSize(24);
 		console.setGreeting("Welcome to Vaadin console demo.");
 		console.reset();
@@ -72,6 +70,10 @@ public class DemoUI extends UI {
 				}
 				return listAvailableCommands();
 			}
+
+			public void kill() { /* not supported */ }
+
+			public boolean isKilled() { return false; }
 		};
 
 		// Bind the same command with multiple names
@@ -84,24 +86,36 @@ public class DemoUI extends UI {
 		Command systemCommand = new Command() {
 			private static final long serialVersionUID = -5733237166568671987L;
 
+			private Process process;
+			private boolean killed;
+
 			public Object execute(Console console, String[] argv) throws Exception {
-				Process p = Runtime.getRuntime().exec(argv);
-				InputStream in = p.getInputStream();
+				// simulate a blocking command
+				if (argv[0].equals("sleep")) argv = new String[] { "sleep", "10" };
+				killed = false;
+				process = Runtime.getRuntime().exec(argv);
+				InputStream in = process.getInputStream();
 				StringBuilder o = new StringBuilder();
-				InputStreamReader r = new InputStreamReader(in);
-				int c = -1;
-				try {
+				try (InputStreamReader r = new InputStreamReader(in)) {
+					int c;
 					while ((c = r.read()) != -1) {
 						o.append((char) c);
 					}
 				} catch (IOException e) {
 					o.append("[truncated]");
-				} finally {
-					if (r != null) {
-						r.close();
-					}
 				}
-				return o.toString();
+				return killed ? null : o.toString();
+			}
+
+			public void kill() {
+				System.out.println("# killed");
+				killed = true;
+				if (process != null)
+					process.destroy();
+			}
+
+			public boolean isKilled() {
+				return killed;
 			}
 
 			public String getUsage(Console console, String[] argv) {
@@ -112,6 +126,7 @@ public class DemoUI extends UI {
 
 		// #
 		console.addCommand("ls", systemCommand);
+		console.addCommand("sleep", systemCommand);
 
 		// Add sample command
 		DummyCmd dummy = new DummyCmd();
@@ -125,20 +140,6 @@ public class DemoUI extends UI {
 		console.addCommand("exit", dummy);
 	}
 
-	protected String readToString(InputStream in) {
-		StringBuilder o = new StringBuilder();
-		InputStreamReader r = new InputStreamReader(in);
-		int c = -1;
-		try {
-			while ((c = r.read()) != -1) {
-				o.append((char) c);
-			}
-		} catch (IOException e) {
-			o.append("[truncated]");
-		}
-		return o.toString();
-	}
-
 	public static class DummyCmd implements Console.Command {
 		private static final long serialVersionUID = -7725047596507450670L;
 
@@ -146,12 +147,16 @@ public class DemoUI extends UI {
 			return "Sorry, this is not a real shell and '" + argv[0] + "' is unsupported. Try 'help' instead.";
 		}
 
+		public void kill() { /* unsupported */ }
+
+		public boolean isKilled() { return false; }
+
 		public String getUsage(Console console, String[] argv) {
 			return "Sorry, this is not a real shell and '" + argv[0] + "' is unsupported. Try 'help' instead.";
 		}
 	}
 
-	protected String listAvailableCommands() {
+	private String listAvailableCommands() {
 		StringBuilder res = new StringBuilder();
 		for (String cmd : inspector.getAvailableCommands()) {
 			res.append(" ");
@@ -159,5 +164,4 @@ public class DemoUI extends UI {
 		}
 		return res.toString().trim();
 	}
-
 }

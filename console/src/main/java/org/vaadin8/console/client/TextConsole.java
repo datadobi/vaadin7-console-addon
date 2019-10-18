@@ -15,10 +15,8 @@ import com.google.gwt.dom.client.TableElement;
 import com.google.gwt.dom.client.TableRowElement;
 import com.google.gwt.dom.client.TableSectionElement;
 import com.google.gwt.event.dom.client.ClickEvent;
-import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.KeyCodes;
 import com.google.gwt.event.dom.client.KeyDownEvent;
-import com.google.gwt.event.dom.client.KeyDownHandler;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.ui.FocusWidget;
@@ -34,18 +32,19 @@ public class TextConsole extends FocusWidget {
 
 	/* Control characters in http://en.wikipedia.org/wiki/Control_character */
 
-	public static final char CTRL_BELL = 'G';
-	public static final char CTRL_BACKSPACE = 'H';
-	public static final char CTRL_TAB = 'I';
-	public static final char CTRL_LINE_FEED = 'J';
-	public static final char CTRL_FORM_FEED = 'L';
-	public static final char CTRL_CARRIAGE_RETURN = 'M';
-	public static final char CTRL_ESCAPE = '[';
-	public static final char CTRL_DELETE = '?';
+	private static final char CTRL_BELL = 'G';
+	private static final char CTRL_BACKSPACE = 'H';
+	private static final char CTRL_TAB = 'I';
+	private static final char CTRL_LINE_FEED = 'J';
+	private static final char CTRL_FORM_FEED = 'L';
+	private static final char CTRL_CARRIAGE_RETURN = 'M';
+	private static final char CTRL_ESCAPE = '[';
+	private static final char CTRL_DELETE = '?';
+	private static final char CTRL_C = 'C';
 
-	private static final char[] CTRL = { CTRL_BELL, CTRL_BACKSPACE, CTRL_TAB, CTRL_LINE_FEED, CTRL_FORM_FEED, CTRL_CARRIAGE_RETURN, CTRL_ESCAPE, CTRL_DELETE };
+	private static final char[] CTRL = { CTRL_BELL, CTRL_BACKSPACE, CTRL_TAB, CTRL_LINE_FEED, CTRL_FORM_FEED, CTRL_CARRIAGE_RETURN, CTRL_ESCAPE, CTRL_DELETE, CTRL_C };
 
-	public static char getControlKey(final int kc) {
+	private static char getControlKey(final int kc) {
 		for (final char c : CTRL) {
 			if (kc == c) {
 				return c;
@@ -134,56 +133,50 @@ public class TextConsole extends FocusWidget {
 
 		config = TextConsoleConfig.newInstance();
 
-		setPromtActive(false);
+		setPromptActive(false);
 
 		registerHandlersIfNeeded();
 
 		updateFontDimensions();
 	}
 
-	protected void registerHandlersIfNeeded() {
+	private void registerHandlersIfNeeded() {
 		if (clickHandler == null) {
-			clickHandler = addDomHandler(new ClickHandler() {
-
-				public void onClick(final ClickEvent event) {
-					setFocus(true);
-				}
-			}, ClickEvent.getType());
+			clickHandler = addDomHandler(event -> setFocus(true), ClickEvent.getType());
 		}
 
 		if (keyHandler == null) {
-			keyHandler = addDomHandler(new KeyDownHandler() {
+			keyHandler = addDomHandler(event -> {
 
-				public void onKeyDown(final KeyDownEvent event) {
-
-					// (re-)show the prompt
-					setPromtActive(true);
-
-					if (event.getNativeKeyCode() == KeyCodes.KEY_ENTER) {
-						event.preventDefault();
-						carriageReturn();
-					} else if (event.getNativeKeyCode() == KeyCodes.KEY_UP || event.getNativeKeyCode() == KeyCodes.KEY_DOWN) {
-						event.preventDefault();
-						handleCommandHistoryBrowse(event.getNativeKeyCode());
-					} else if (event.getNativeKeyCode() == KeyCodes.KEY_TAB) {
-						event.preventDefault();
-						suggest();
-					} else if (event.getNativeKeyCode() == KeyCodes.KEY_BACKSPACE && getInputLenght() == 0) {
-						bell();
-					} else if (event.getNativeEvent().getCtrlKey()) {
-						final char ctrlChar = getControlKey(event.getNativeKeyCode());
-						if (ctrlChar > 0) {
-							event.preventDefault();
-							handleControlChar(ctrlChar);
-						}
-					}
-
+				// (re-)show the prompt
+				// setPromptActive(true);
+				if (!isPromptActive()) {
+					event.preventDefault();
 				}
+				if (event.getNativeKeyCode() == KeyCodes.KEY_ENTER) {
+					event.preventDefault();
+					carriageReturn();
+				} else if (event.getNativeKeyCode() == KeyCodes.KEY_UP || event.getNativeKeyCode() == KeyCodes.KEY_DOWN) {
+					event.preventDefault();
+					handleCommandHistoryBrowse(event.getNativeKeyCode());
+				} else if (event.getNativeKeyCode() == KeyCodes.KEY_TAB) {
+					event.preventDefault();
+					suggest();
+				} else if (event.getNativeKeyCode() == KeyCodes.KEY_BACKSPACE && getInputLenght() == 0) {
+					bell();
+				} else if (event.getNativeEvent().getCtrlKey()) {
+					final char ctrlChar = getControlKey(event.getNativeKeyCode());
+					if (ctrlChar > 0) {
+						event.preventDefault();
+						handleControlChar(ctrlChar);
+					}
+				}
+
 			}, KeyDownEvent.getType());
 		}
 	}
 
-	protected int getInputLenght() {
+	private int getInputLenght() {
 		final String v = input.getValue();
 		if (v != null) {
 			return v.length();
@@ -191,7 +184,7 @@ public class TextConsole extends FocusWidget {
 		return -1;
 	}
 
-	protected void handleControlChar(final char c) {
+	private void handleControlChar(final char c) {
 		switch (c) {
 		case TextConsole.CTRL_BACKSPACE:
 			backspace();
@@ -217,9 +210,11 @@ public class TextConsole extends FocusWidget {
 		case TextConsole.CTRL_TAB:
 			tab();
 			break;
+		case TextConsole.CTRL_C:
+			kill();
+			break;
 
 		default:
-			bell();
 			break;
 		}
 	}
@@ -228,7 +223,13 @@ public class TextConsole extends FocusWidget {
 		handler.suggest(getInput());
 	}
 
-	protected void handleCommandHistoryBrowse(final int i) {
+	protected void kill() {
+		ps.setInnerHTML("");
+		setInput("");
+		handler.kill();
+	}
+
+	private void handleCommandHistoryBrowse(final int i) {
 		cmdHistoryIndex = i == KeyCodes.KEY_UP ? cmdHistoryIndex - 1 : cmdHistoryIndex + 1;
 		if (cmdHistoryIndex >= 0 && cmdHistoryIndex < cmdHistory.size()) {
 			prompt(cmdHistory.get(cmdHistoryIndex));
@@ -252,7 +253,7 @@ public class TextConsole extends FocusWidget {
 		}
 	}
 
-	public void lineFeed() {
+	private void lineFeed() {
 		carriageReturn();
 	}
 
@@ -260,13 +261,13 @@ public class TextConsole extends FocusWidget {
 		prompt(getInput() + "\t");
 	}
 
-	protected void backspace() {
+	private void backspace() {
 		bell();
 	}
 
-	protected void carriageReturn() {
+	void carriageReturn() {
 		if (config.isPrintPromptOnInput()) {
-			setPromtActive(false);
+			setPromptActive(false);
 			// Append newline first if not there yet
 			if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
 				newLine();
@@ -294,13 +295,14 @@ public class TextConsole extends FocusWidget {
 		if (handler != null) {
 			handler.terminalInput(this, lineBuffer);
 		}
+		setFocus(true);
 	}
 
 	private boolean bufferIsEmpty() {
 		return !buffer.hasChildNodes();
 	}
 
-	private void setPromtActive(final boolean active) {
+	private void setPromptActive(final boolean active) {
 		if (active && !isPromptActive()) {
 			prompt.getStyle().setDisplay(Display.BLOCK);
 		} else if (!active && isPromptActive()) {
@@ -392,11 +394,11 @@ public class TextConsole extends FocusWidget {
 		return Document.get().createBRElement();
 	}
 
-	public void focusPrompt() {
+	private void focusPrompt() {
 		focusPrompt(-1);
 	}
 
-	public void focusPrompt(final int cursorPos) {
+	private void focusPrompt(final int cursorPos) {
 		input.focus();
 
 		// Focus to end
@@ -470,8 +472,14 @@ public class TextConsole extends FocusWidget {
 		ps.setInnerHTML(cleanPs);
 	}
 
+	public void ping() {
+		if (!isPromptActive()) {
+			handler.pong();
+		}
+	}
+
 	public void prompt(final String inputText) {
-		setPromtActive(true);
+		setPromptActive(true);
 		scrollToEnd();
 		ps.setInnerHTML(cleanPs);
 		setInput(inputText);
@@ -479,7 +487,7 @@ public class TextConsole extends FocusWidget {
 
 	public void focusInput() {
 		if (isFocused())
-			setPromtActive(true);
+			setPromptActive(true);
 		scrollToEnd();
 		ps.setInnerHTML(cleanPs);
 	}
@@ -511,7 +519,7 @@ public class TextConsole extends FocusWidget {
 		if (string == null)
 			string = "";
 		if (isPromptActive()) {
-			setPromtActive(false);
+			setPromptActive(false);
 			if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
 				newLine();
 				reducePrompt(-1);
@@ -560,7 +568,7 @@ public class TextConsole extends FocusWidget {
 		if (string == null)
 			string = "";
 		if (isPromptActive()) {
-			setPromtActive(false);
+			setPromptActive(false);
 			if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
 				newLine();
 				reducePrompt(-1);
@@ -692,7 +700,6 @@ public class TextConsole extends FocusWidget {
 	 * Split long text based on length.
 	 * 
 	 * @param parent
-	 * @param doWrap
 	 * @param str
 	 * @return
 	 */
@@ -763,7 +770,7 @@ public class TextConsole extends FocusWidget {
 		}
 	}
 
-	protected void calculateRowsFromHeight() {
+	private void calculateRowsFromHeight() {
 		int oldRows = rows;
 		final int h = term.getClientHeight() - (2 * padding);
 		rows = h / fontH;
@@ -777,7 +784,7 @@ public class TextConsole extends FocusWidget {
 		}
 	}
 
-	protected void calculateHeightFromRows() {
+	private void calculateHeightFromRows() {
 		super.setHeight((rows * fontH) + "px");
 
 		// GWT.log("calculateHeightFromRows: font=" + fontW + "x" + fontH
@@ -787,7 +794,7 @@ public class TextConsole extends FocusWidget {
 		handler.paintableSizeChanged();
 	}
 
-	protected void calculateColsFromWidth() {
+	private void calculateColsFromWidth() {
 		int oldCols = cols;
 		final int w = term.getClientWidth();
 		cols = (w - 2 * paddingW) / fontW;
@@ -802,7 +809,7 @@ public class TextConsole extends FocusWidget {
 		}
 	}
 
-	protected void calculateWidthFromCols() {
+	private void calculateWidthFromCols() {
 		final int w = cols * fontW;
 		super.setWidth((w + scrollbarW) + "px");
 		buffer.getStyle().setWidth(w, Unit.PX);
@@ -874,7 +881,7 @@ public class TextConsole extends FocusWidget {
 
 	public void reset() {
 		beforeChangeTerminal();
-		setPromtActive(false);
+		setPromptActive(false);
 		clearBuffer();
 		setPromptHeight(getRows());
 		print(config.getGreeting());
@@ -901,7 +908,7 @@ public class TextConsole extends FocusWidget {
 		}
 	}
 
-	public void formFeed() {
+	void formFeed() {
 		for (int i = 0; i < promptRows; i++) {
 			newLine();
 		}
@@ -911,7 +918,7 @@ public class TextConsole extends FocusWidget {
 		checkBufferLimit();
 	}
 
-	protected void clearCommandHistory() {
+	void clearCommandHistory() {
 		cmdHistory = new ArrayList<String>();
 		cmdHistoryIndex = -1;
 	}

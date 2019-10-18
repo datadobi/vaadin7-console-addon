@@ -6,6 +6,10 @@ public interface TextConsoleHandler {
 
 	public void suggest(String input);
 
+	public void kill();
+
+	public void pong();
+
 	public void colsChanged(int cols);
 
 	public void rowsChanged(int rows);

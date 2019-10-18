@@ -42,6 +42,8 @@ public interface ConsoleClientRpc extends ClientRpc {
 
 	public void prompt(String inputText);
 
+	public void ping();
+
 	public void ff();
 
 	public void cr();

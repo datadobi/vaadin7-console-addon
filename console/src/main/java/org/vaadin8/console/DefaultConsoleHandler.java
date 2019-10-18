@@ -2,6 +2,8 @@ package org.vaadin8.console;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.vaadin8.console.Console.Command;
 import org.vaadin8.console.Console.Handler;
@@ -36,7 +38,27 @@ public class DefaultConsoleHandler implements Handler {
 	}
 
 	public void inputReceived(final Console console, final String lastInput) {
-		console.parseAndExecuteCommand(lastInput);
+		try {
+			CompletableFuture.supplyAsync(() -> {
+						Command c = console.parseAndExecuteCommand(lastInput);
+						if (c == null || !c.isKilled()) {
+							// if command was killed, killReceived handler will issue the prompt
+							console.prompt();
+						}
+						return "";
+					})
+					// in case of a blocking command, bypass pending long-polling rpc requests by setting up a heartbeat
+					.completeOnTimeout(null, 1, TimeUnit.SECONDS)
+					.whenComplete((result, error) -> { if (result == null) console.ping(); })
+					.get();
+		}
+		catch (Exception ex) {
+			handleException(console, ex, null, null);
+		}
+	}
+
+	public void killReceived(final Console console) {
+		console.abortLastCommand();
 		console.prompt();
 	}
 
