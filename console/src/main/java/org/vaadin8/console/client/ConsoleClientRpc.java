@@ -11,65 +11,42 @@ import com.vaadin.shared.communication.ClientRpc;
  * 
  */
 public interface ConsoleClientRpc extends ClientRpc {
+	void print(String text);
 
-	public void setGreeting(String greeting);
+	void printWithClass(String text, String className);
 
-	public void setPs(String ps);
+	void println(String text);
 
-	public void setWrap(boolean wrap);
+	void printlnWithClass(String text, String className);
 
-	public void setRows(int rows);
+	void append(String text);
 
-	public void setCols(int cols);
+	void appendWithClass(String text, String className);
 
-	public void setWidth(int width);
+	void prompt();
 
-	public void setHeight(int height);
+	void prompt(String inputText);
 
-	public void print(String text);
+	void ff();
 
-	public void printWithClass(String text, String className);
+	void cr();
 
-	public void println(String text);
+	void lf();
 
-	public void printlnWithClass(String text, String className);
+	void clearBuffer();
 
-	public void append(String text);
+	void reset();
 
-	public void appendWithClass(String text, String className);
+	void newLine();
 
-	public void prompt();
+	void newLineIfNotEndsWithNewLine();
 
-	public void prompt(String inputText);
+	void scrollToEnd();
 
-	public void ping();
+	void focusInput();
 
-	public void ff();
+	void bell();
 
-	public void cr();
-
-	public void lf();
-
-	public void clearBuffer();
-
-	public void reset();
-
-	public void newLine();
-
-	public void newLineIfNotEndsWithNewLine();
-
-	public void scrollToEnd();
-
-	public void focusInput();
-
-	public void bell();
-
-	public void setMaxBufferSize(int bufferSize);
-
-	public void clearHistory();
-
-	public void setPrintPromptOnInput(boolean printPromptOnInput);
-
-	public void setScrollLock(boolean scrollLock);
+	void clearHistory();
 
 }

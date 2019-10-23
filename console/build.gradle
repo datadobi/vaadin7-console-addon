@@ -1,0 +1,28 @@
+plugins {
+    id 'com.devsoap.plugin.vaadin' version '1.4.1'
+}
+
+dependencies {
+    testCompile 'junit:junit:4.11'
+}
+
+vaadin {
+    version '8.9.1'
+}
+
+vaadinAddon {
+    author 'Datadobi'
+    license 'ASLv2'
+    title 'Console Addon'
+
+    /**
+     * An array of paths relative to webroot (eg. '/VAADIN/addons/myaddon/myaddon.scss') where CSS and SCSS files for an addon can be found.
+     */
+    styles ['/VAADIN/org/vaadin8/console/public/console/styles.css']
+}
+
+jar{
+    from sourceSets.main.allJava
+}
+
+description = 'Console Add-on'

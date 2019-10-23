@@ -1,0 +1,25 @@
+plugins {
+    id 'com.devsoap.plugin.vaadin' version '1.4.1'
+    id 'war'
+}
+
+dependencies {
+    compile project(':console')
+}
+
+vaadin {
+    version '8.9.1'
+    push true
+}
+
+vaadinCompile {
+    optimize 0
+    logEnabled true
+    logLevel 'DEBUG'
+    strict true
+    collapsePermutations true
+    profiler false
+    manageWidgetset true
+}
+
+description = 'Console Add-on Demo'

@@ -1,17 +1,17 @@
 package org.vaadin8.console.client;
 
-import org.vaadin8.console.Console;
-
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.event.dom.client.FocusEvent;
 import com.google.gwt.event.dom.client.FocusHandler;
 import com.google.gwt.user.client.ui.Widget;
-import com.vaadin.client.annotations.OnStateChange;
 import com.vaadin.client.communication.RpcProxy;
 import com.vaadin.client.communication.StateChangeEvent;
 import com.vaadin.client.ui.AbstractComponentConnector;
+import com.vaadin.client.ui.layout.ElementResizeEvent;
+import com.vaadin.client.ui.layout.ElementResizeListener;
 import com.vaadin.shared.communication.FieldRpc.FocusAndBlurServerRpc;
 import com.vaadin.shared.ui.Connect;
+import org.vaadin8.console.Console;
 
 /**
  * Connector binds client-side widget class to server-side component class.
@@ -23,7 +23,7 @@ import com.vaadin.shared.ui.Connect;
  * 
  */
 @Connect(Console.class)
-public class ConsoleConnector extends AbstractComponentConnector implements FocusHandler {
+public class ConsoleConnector extends AbstractComponentConnector implements FocusHandler, ElementResizeListener {
 
 	private static final long serialVersionUID = 2829157055722482839L;
 
@@ -36,44 +36,6 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 		// To receive RPC events from server, we register ClientRpc
 		// implementation
 		registerRpc(ConsoleClientRpc.class, new ConsoleClientRpc() {
-
-			@Override
-			public void setGreeting(String greeting) {
-				getWidget().getConfig().setGreeting(greeting);
-			}
-
-			@Override
-			public void setPs(String ps) {
-				getWidget().setPs(ps);
-			}
-
-			@Override
-			public void setWrap(boolean wrap) {
-				getWidget().getConfig().setWrap(wrap);
-			}
-
-			@Override
-			public void setRows(int rows) {
-				getWidget().getConfig().setRows(rows);
-				getWidget().setRows(rows);
-			}
-
-			@Override
-			public void setCols(int cols) {
-				getWidget().getConfig().setCols(cols);
-				getWidget().setCols(cols);
-			}
-
-			@Override
-			public void setWidth(int width) {
-				getWidget().setWidth(width + "px");
-			}
-
-			@Override
-			public void setHeight(int height) {
-				getWidget().setHeight(height + "px");
-			}
-
 			@Override
 			public void print(String text) {
 				getWidget().print(text);
@@ -103,9 +65,6 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			public void appendWithClass(String text, String className) {
 				getWidget().appendWithClass(text, className);
 			}
-
-			@Override
-			public void ping() { getWidget().ping(); }
 
 			@Override
 			public void prompt() {
@@ -168,26 +127,9 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			}
 
 			@Override
-			public void setMaxBufferSize(int bufferSize) {
-				getWidget().getConfig().setMaxBufferSize(bufferSize);
-				getWidget().setMaxBufferSize(bufferSize);
-			}
-
-			@Override
 			public void clearHistory() {
 				getWidget().clearCommandHistory();
 			}
-
-			@Override
-			public void setPrintPromptOnInput(boolean printPromptOnInput) {
-				getWidget().getConfig().setPrintPromptOnInput(printPromptOnInput);
-			}
-
-			@Override
-			public void setScrollLock(boolean scrollLock) {
-				getWidget().getConfig().setScrollLock(scrollLock);
-			}
-
 		});
 
 		getWidget().setHandler(new TextConsoleHandler() {
@@ -203,45 +145,41 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			}
 
 			@Override
-			public void kill() {
-				rpc.kill();
-			}
-
-			public void pong() {
-				rpc.pong();
-			}
-
-			@Override
-			public void paintableSizeChanged() {
-				notifyPaintableSizeChange();
-				rpc.setHeight(getWidget().getHeight());
-				rpc.setWidth(getWidget().getWidth());
-			}
-
-			@Override
-			public void rowsChanged(int rows) {
-				rpc.setRows(rows);
-			}
-
-			@Override
-			public void colsChanged(int cols) {
-				rpc.setCols(cols);
+			public void controlChar(char c) {
+				rpc.controlChar(c);
 			}
 		});
 
 	}
 
+	@Override
+	public void init() {
+		super.init();
+		getLayoutManager().addElementResizeListener(getWidget().getElement(), this);
+	}
+
+	@Override
+	public void onUnregister() {
+		super.onUnregister();
+		getLayoutManager().removeElementResizeListener(getWidget().getElement(), this);
+	}
+
+	@Override
+	public void onElementResize(ElementResizeEvent elementResizeEvent) {
+		getWidget().resized();
+	}
+
 	// We must implement createWidget() to create correct type of widget
 	@Override
 	protected Widget createWidget() {
-		ConsoleWidget widget = GWT.create(ConsoleWidget.class);
+		TextConsole widget = GWT.create(TextConsole.class);
 		return widget;
 	}
 
 	// We must implement getWidget() to cast to correct type
 	@Override
-	public ConsoleWidget getWidget() {
-		return (ConsoleWidget) super.getWidget();
+	public TextConsole getWidget() {
+		return (TextConsole) super.getWidget();
 	}
 
 	// We must implement getState() to cast to correct type
@@ -250,33 +188,10 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 		return (ConsoleState) super.getState();
 	}
 
-	// Whenever the state changes in the server-side, this method is called
-	@Override
-	public void onStateChanged(StateChangeEvent stateChangeEvent) {
-		// GWT.log("onStateChanged() width = " + getState().width);
-		super.onStateChanged(stateChangeEvent);
-	}
-
 	@Override
 	public void onFocus(FocusEvent event) {
 		// EventHelper.updateFocusHandler ensures that this is called only when
 		// there is a listener on server side
 		getRpcProxy(FocusAndBlurServerRpc.class).focus();
-	}
-
-	public void notifyPaintableSizeChange() {
-		getLayoutManager().setNeedsMeasure(this);
-	}
-
-	@OnStateChange("width")
-	void widthChanged() {
-		// GWT.log("widthChanged to " + getState().width);
-		getWidget().setWidth(getState().width);
-	}
-
-	@OnStateChange("height")
-	void heightChanged() {
-		// GWT.log("heightChanged to " + getState().height);
-		getWidget().setHeight(getState().height);
 	}
 }

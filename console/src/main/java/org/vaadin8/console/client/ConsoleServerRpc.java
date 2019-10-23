@@ -10,20 +10,9 @@ import com.vaadin.shared.communication.ServerRpc;
  * 
  */
 public interface ConsoleServerRpc extends ServerRpc {
+	void input(String input);
 
-	public void setHeight(String height);
+	void suggest(String input);
 
-	public void setWidth(String width);
-
-	public void setCols(int cols);
-
-	public void setRows(int rows);
-
-	public void input(String input);
-
-	public void suggest(String input);
-
-	public void kill();
-
-	public void pong();
+	void controlChar(char c);
 }

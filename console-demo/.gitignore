@@ -3,5 +3,6 @@
 *.settings*
 .classpath
 .project
+/build
 /target
 /src/main/webapp/VAADIN/widgetsets/*

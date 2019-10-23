@@ -1,19 +1,8 @@
 package org.vaadin8.console.client;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import com.google.gwt.dom.client.DivElement;
-import com.google.gwt.dom.client.Document;
-import com.google.gwt.dom.client.Element;
-import com.google.gwt.dom.client.InputElement;
-import com.google.gwt.dom.client.Node;
+import com.google.gwt.dom.client.*;
 import com.google.gwt.dom.client.Style.Display;
 import com.google.gwt.dom.client.Style.Unit;
-import com.google.gwt.dom.client.TableCellElement;
-import com.google.gwt.dom.client.TableElement;
-import com.google.gwt.dom.client.TableRowElement;
-import com.google.gwt.dom.client.TableSectionElement;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.KeyCodes;
 import com.google.gwt.event.dom.client.KeyDownEvent;
@@ -22,14 +11,11 @@ import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.ui.FocusWidget;
 import com.vaadin.client.Util;
 
-/**
- * GWT Console Widget.
- * 
- * @author Sami Ekblad / Vaadin
- * 
- */
-public class TextConsole extends FocusWidget {
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
 
+public class TextConsole extends FocusWidget {
 	/* Control characters in http://en.wikipedia.org/wiki/Control_character */
 
 	private static final char CTRL_BELL = 'G';
@@ -55,8 +41,11 @@ public class TextConsole extends FocusWidget {
 
 	private static final String DEFAULT_TABS = "    ";
 	private static final int BIG_NUMBER = 100000;
+
+	private String greeting;
+	private boolean scrollLock;
+
 	private final DivElement term;
-	private TextConsoleConfig config;
 	private TextConsoleHandler handler;
 	private final Element buffer;
 	private final TableElement prompt;
@@ -81,14 +70,16 @@ public class TextConsole extends FocusWidget {
 	private int maxBufferSize;
 	private String cleanPs;
 	private int paddingW;
+	private boolean scrolledToEnd = true;
 
 	public TextConsole() {
+		setElement(Document.get().createDivElement());
 
 		// Main element
 		term = Document.get().createDivElement();
 		term.addClassName("term");
-		setElement(term);
 		setTabIndex(0);
+		getElement().appendChild(term);
 
 		// Buffer
 		buffer = Document.get().createElement("pre");
@@ -131,8 +122,6 @@ public class TextConsole extends FocusWidget {
 		input.setTabIndex(-1);
 		input.setAttribute("spellcheck", "false");
 
-		config = TextConsoleConfig.newInstance();
-
 		setPromptActive(false);
 
 		registerHandlersIfNeeded();
@@ -147,31 +136,31 @@ public class TextConsole extends FocusWidget {
 
 		if (keyHandler == null) {
 			keyHandler = addDomHandler(event -> {
-
-				// (re-)show the prompt
-				// setPromptActive(true);
-				if (!isPromptActive()) {
-					event.preventDefault();
-				}
-				if (event.getNativeKeyCode() == KeyCodes.KEY_ENTER) {
-					event.preventDefault();
-					carriageReturn();
-				} else if (event.getNativeKeyCode() == KeyCodes.KEY_UP || event.getNativeKeyCode() == KeyCodes.KEY_DOWN) {
-					event.preventDefault();
-					handleCommandHistoryBrowse(event.getNativeKeyCode());
-				} else if (event.getNativeKeyCode() == KeyCodes.KEY_TAB) {
-					event.preventDefault();
-					suggest();
-				} else if (event.getNativeKeyCode() == KeyCodes.KEY_BACKSPACE && getInputLenght() == 0) {
-					bell();
-				} else if (event.getNativeEvent().getCtrlKey()) {
+				if (event.getNativeEvent().getCtrlKey()) {
 					final char ctrlChar = getControlKey(event.getNativeKeyCode());
 					if (ctrlChar > 0) {
 						event.preventDefault();
 						handleControlChar(ctrlChar);
 					}
-				}
+				} else {
+					boolean promptActive = isPromptActive();
+					getLogger().info("handleKeyEvent(promptActive=" + promptActive + ")");
 
+					if (!promptActive) {
+						event.preventDefault();
+					} else if (event.getNativeKeyCode() == KeyCodes.KEY_ENTER) {
+						event.preventDefault();
+						carriageReturn();
+					} else if (event.getNativeKeyCode() == KeyCodes.KEY_UP || event.getNativeKeyCode() == KeyCodes.KEY_DOWN) {
+						event.preventDefault();
+						handleCommandHistoryBrowse(event.getNativeKeyCode());
+					} else if (event.getNativeKeyCode() == KeyCodes.KEY_TAB) {
+						event.preventDefault();
+						suggest();
+					} else if (event.getNativeKeyCode() == KeyCodes.KEY_BACKSPACE && getInputLenght() == 0) {
+						bell();
+					}
+				}
 			}, KeyDownEvent.getType());
 		}
 	}
@@ -198,9 +187,6 @@ public class TextConsole extends FocusWidget {
 		case TextConsole.CTRL_DELETE:
 			bell(); // TODO: not supported yet
 			break;
-		case TextConsole.CTRL_ESCAPE:
-			bell(); // TODO: not supported yet
-			break;
 		case TextConsole.CTRL_FORM_FEED:
 			formFeed();
 			break;
@@ -210,11 +196,8 @@ public class TextConsole extends FocusWidget {
 		case TextConsole.CTRL_TAB:
 			tab();
 			break;
-		case TextConsole.CTRL_C:
-			kill();
-			break;
-
 		default:
+			controlChar(c);
 			break;
 		}
 	}
@@ -223,10 +206,8 @@ public class TextConsole extends FocusWidget {
 		handler.suggest(getInput());
 	}
 
-	protected void kill() {
-		ps.setInnerHTML("");
-		setInput("");
-		handler.kill();
+	protected void controlChar(char c) {
+		handler.controlChar(c);
 	}
 
 	private void handleCommandHistoryBrowse(final int i) {
@@ -266,24 +247,10 @@ public class TextConsole extends FocusWidget {
 	}
 
 	void carriageReturn() {
-		if (config.isPrintPromptOnInput()) {
-			setPromptActive(false);
-			// Append newline first if not there yet
-			if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
-				newLine();
-				reducePrompt(-1);
-			}
-			print(getCurrentPromptContent());
+		if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
 			newLine();
 			if (promptRows > 1) {
 				reducePrompt(-1);
-			}
-		} else {
-			if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
-				newLine();
-				if (promptRows > 1) {
-					reducePrompt(-1);
-				}
 			}
 		}
 		String lineBuffer = getInput();
@@ -303,6 +270,7 @@ public class TextConsole extends FocusWidget {
 	}
 
 	private void setPromptActive(final boolean active) {
+		getLogger().info("setPromptActive(" + active + ")");
 		if (active && !isPromptActive()) {
 			prompt.getStyle().setDisplay(Display.BLOCK);
 		} else if (!active && isPromptActive()) {
@@ -328,19 +296,16 @@ public class TextConsole extends FocusWidget {
 		if (padStr != null && padStr.endsWith("px")) {
 			padding = Integer.parseInt(padStr.substring(0, padStr.length() - 2));
 		} else {
-			// GWT.log("using default padding: 1x2");
+			getLogger().info("using default padding: 1x2");
 			padding = 1;
 			paddingW = 2;
 		}
 
-		// GWT.log("init: font=" + fontW + "x" + fontH + ";scrollbar="
-		// + scrollbarW + ";cols=" + config.getCols() + ";rows="
-		// + config.getRows() + ";size=" + getWidth() + "x" + getHeight());
+		getLogger().info("init: font=" + fontW + "x" + fontH + ";scrollbar="
+		 + scrollbarW + ";size=" + getWidth() + "x" + getHeight());
 
-		setPs(config.getPs());
-		setCols(config.getCols());
-		setRows(config.getRows());
-		setMaxBufferSize(config.getMaxBufferSize());
+		setPs(">");
+		setMaxBufferSize(maxBufferSize);
 	}
 
 	private void updateFontDimensions() {
@@ -368,21 +333,11 @@ public class TextConsole extends FocusWidget {
 		term.removeChild(test);
 	}
 
-	// Debug instrumentation. TODO: Remove.
-	// protected void GWT.log(final String string) {
-	// ApplicationConnection.getConsole().log(string);
-	// }
-
-	public TextConsoleConfig getConfig() {
-		return config;
-	}
-
 	private boolean bufferEndsWithNewLine() {
 		Node last = buffer != null ? buffer.getLastChild() : null;
 		while (last != null && last.getLastChild() != null)
 			last = last.getLastChild();
-		// GWT.log("last node: " + (last != null ? last.getNodeName() :
-		// "<null>"));
+		getLogger().info("last node: " + (last != null ? last.getNodeName() : "<null>"));
 		return last != null && "br".equals(last.getNodeName().toLowerCase());
 	}
 
@@ -449,7 +404,7 @@ public class TextConsole extends FocusWidget {
 											}-*/;
 
 	public void newLine() {
-		// GWT.log("newline");
+		getLogger().info("newline");
 		beforeChangeTerminal();
 		buffer.appendChild(createBr());
 		checkBufferLimit();
@@ -458,7 +413,7 @@ public class TextConsole extends FocusWidget {
 
 	public void newLineIfNotEndsWithNewLine() {
 		if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
-			// GWT.log("newline");
+			getLogger().info("newline");
 			beforeChangeTerminal();
 			buffer.appendChild(createBr());
 			checkBufferLimit();
@@ -466,16 +421,11 @@ public class TextConsole extends FocusWidget {
 		}
 	}
 
-	protected void setPs(final String string) {
+	public void setPs(final String string) {
+		getLogger().info("setPs: ps=" + string);
 		cleanPs = Util.escapeHTML(string);
 		cleanPs = cleanPs.replaceAll(" ", "&nbsp;");
 		ps.setInnerHTML(cleanPs);
-	}
-
-	public void ping() {
-		if (!isPromptActive()) {
-			handler.pong();
-		}
 	}
 
 	public void prompt(final String inputText) {
@@ -495,8 +445,8 @@ public class TextConsole extends FocusWidget {
 	private boolean isCheckedScrollState = false;
 
 	public void scrollToEnd() {
-		if (config.isScrollLock()) {
-			if (config.isScrolledToEnd())
+		if (scrollLock) {
+			if (scrolledToEnd)
 				term.setScrollTop(BIG_NUMBER);
 		} else
 			term.setScrollTop(BIG_NUMBER);
@@ -505,7 +455,7 @@ public class TextConsole extends FocusWidget {
 
 	private void beforeChangeTerminal() {
 		if (!isCheckedScrollState) {
-			config.setScrolledToEnd(term.getScrollTop() >= term.getScrollHeight() - term.getClientHeight());
+			scrolledToEnd = term.getScrollTop() >= term.getScrollHeight() - term.getClientHeight();
 			isCheckedScrollState = true;
 		}
 	}
@@ -526,16 +476,13 @@ public class TextConsole extends FocusWidget {
 			}
 			string = getCurrentPromptContent() + string;
 		}
-		final boolean doWrap = config.isWrap();
-		// GWT.log("print original: '" + string + "' (" + doWrap + ")");
 		String str = string.replaceAll("\t", tabs);
 
 		// Continue to the last text node if available
 		final Node last = getLastFirstLevelTextNode();
 		int linesAdded = 0;
 		if (last != null) {
-			// GWT.log("print append to old node: '" + last.getNodeValue() +
-			// "'");
+			getLogger().info("print append to old node: '" + last.getNodeValue() + "'");
 			str = last.getNodeValue() + str;
 			buffer.removeChild(last);
 			linesAdded--;
@@ -545,7 +492,7 @@ public class TextConsole extends FocusWidget {
 		int s = 0, e = str.indexOf('\n');
 		while (e >= s) {
 			final String line = str.substring(s, e);
-			linesAdded += appendLine(buffer, line, doWrap ? cols : -1);
+			linesAdded += appendLine(buffer, line);
 			buffer.appendChild(createBr());
 			s = e + 1;
 			e = str.indexOf('\n', s);
@@ -553,7 +500,7 @@ public class TextConsole extends FocusWidget {
 
 		// Print the remaining string
 		if (s < str.length()) {
-			linesAdded += appendLine(buffer, str.substring(s), doWrap ? cols : -1);
+			linesAdded += appendLine(buffer, str.substring(s));
 		}
 
 		reducePrompt(linesAdded);
@@ -575,8 +522,6 @@ public class TextConsole extends FocusWidget {
 			}
 			string = getCurrentPromptContent() + string;
 		}
-		final boolean doWrap = config.isWrap();
-		// GWT.log("print original: '" + string + "' (" + doWrap + ")");
 		String str = string.replaceAll("\t", tabs);
 		int linesAdded = 0;
 
@@ -587,7 +532,7 @@ public class TextConsole extends FocusWidget {
 		int s = 0, e = str.indexOf('\n');
 		while (e >= s) {
 			final String line = str.substring(s, e);
-			linesAdded += appendLine(classedChild, line, doWrap ? cols : -1);
+			linesAdded += appendLine(classedChild, line);
 			classedChild.appendChild(createBr());
 			s = e + 1;
 			e = str.indexOf('\n', s);
@@ -595,27 +540,24 @@ public class TextConsole extends FocusWidget {
 
 		// Print the remaining string
 		if (s < str.length()) {
-			linesAdded += appendLine(classedChild, str.substring(s), doWrap ? cols : -1);
+			linesAdded += appendLine(classedChild, str.substring(s));
 		}
 
 		reducePrompt(linesAdded);
 	}
 
 	public void append(String string) {
-		// GWT.log("append = " + string);
+		getLogger().info("append = " + string);
 		beforeChangeTerminal();
 		if (string == null)
 			string = "";
-		final boolean doWrap = config.isWrap();
-		// GWT.log("print original: '" + string + "' (" + doWrap + ")");
 		String str = string.replaceAll("\t", tabs);
 
 		// Continue to the last text node if available
 		final Node last = getLastFirstLevelTextNode();
 		int linesAdded = 0;
 		if (last != null) {
-			// GWT.log("print append to old node: '" + last.getNodeValue() +
-			// "'");
+			getLogger().info("print append to old node: '" + last.getNodeValue() + "'");
 			str = last.getNodeValue() + str;
 			buffer.removeChild(last);
 			linesAdded--;
@@ -625,7 +567,7 @@ public class TextConsole extends FocusWidget {
 		int s = 0, e = str.indexOf('\n');
 		while (e >= s) {
 			final String line = str.substring(s, e);
-			linesAdded += appendLine(buffer, line, doWrap ? cols : -1);
+			linesAdded += appendLine(buffer, line);
 			buffer.appendChild(createBr());
 			s = e + 1;
 			e = str.indexOf('\n', s);
@@ -633,7 +575,7 @@ public class TextConsole extends FocusWidget {
 
 		// Print the remaining string
 		if (s < str.length()) {
-			linesAdded += appendLine(buffer, str.substring(s), doWrap ? cols : -1);
+			linesAdded += appendLine(buffer, str.substring(s));
 		}
 
 		reducePrompt(linesAdded);
@@ -644,12 +586,10 @@ public class TextConsole extends FocusWidget {
 			append(string);
 			return;
 		}
-		// GWT.log("append = " + string + " classname = " + className);
+		getLogger().info("append = " + string + " classname = " + className);
 		beforeChangeTerminal();
 		if (string == null)
 			string = "";
-		final boolean doWrap = config.isWrap();
-		// GWT.log("print original: '" + string + "' (" + doWrap + ")");
 		String str = string.replaceAll("\t", tabs);
 		int linesAdded = 0;
 
@@ -660,7 +600,7 @@ public class TextConsole extends FocusWidget {
 		int s = 0, e = str.indexOf('\n');
 		while (e >= s) {
 			final String line = str.substring(s, e);
-			linesAdded += appendLine(classedChild, line, doWrap ? cols : -1);
+			linesAdded += appendLine(classedChild, line);
 			classedChild.appendChild(createBr());
 			s = e + 1;
 			e = str.indexOf('\n', s);
@@ -668,7 +608,7 @@ public class TextConsole extends FocusWidget {
 
 		// Print the remaining string
 		if (s < str.length()) {
-			linesAdded += appendLine(classedChild, str.substring(s), doWrap ? cols : -1);
+			linesAdded += appendLine(classedChild, str.substring(s));
 		}
 
 		reducePrompt(linesAdded);
@@ -683,16 +623,16 @@ public class TextConsole extends FocusWidget {
 		if (newRows < 1) {
 			newRows = 1;
 		}
-		// GWT.log("prompt reduced from " + promptRows + " to " + newRows);
+		getLogger().info("prompt reduced from " + promptRows + " to " + newRows);
 		setPromptHeight(newRows);
 	}
 
 	private void setPromptHeight(final int rows) {
 		final int min = 1;
-		final int max = getRows();
+		final int max = rows;
 		promptRows = rows < min ? min : (rows > max ? max : rows);
 		final int newHeight = fontH * rows;
-		// GWT.log("Prompt height=" + newHeight);
+		getLogger().info("Prompt height=" + newHeight);
 		promptWrap.getStyle().setHeight(newHeight, Unit.PX);
 	}
 
@@ -703,26 +643,11 @@ public class TextConsole extends FocusWidget {
 	 * @param str
 	 * @return
 	 */
-	private int appendLine(final Node parent, String str, final int maxLine) {
+	private int appendLine(final Node parent, String str) {
 		int linesAdded = 0;
-		final boolean doWrap = maxLine > 0;
-		if (!doWrap) {
-			parent.appendChild(createTextNode(str));
-			// GWT.log("append: '" + str + "'");
-			linesAdded++;
-		} else {
-			while (str.length() > maxLine) {
-				final String piece = str.substring(0, maxLine);
-				parent.appendChild(createTextNode(piece));
-				parent.appendChild(createBr());
-				linesAdded++;
-				// GWT.log("append: '" + piece + "'");
-				str = str.substring(maxLine);
-			}
-			parent.appendChild(createTextNode(str));
-			// GWT.log("append rest: '" + str + "'");
-			linesAdded++;
-		}
+		parent.appendChild(createTextNode(str));
+		getLogger().info("append: '" + str + "'");
+		linesAdded++;
 
 		// make sore we don't exceed the maximum buffer size
 		checkBufferLimit();
@@ -759,83 +684,24 @@ public class TextConsole extends FocusWidget {
 		printWithClass(string + "\n", className);
 	}
 
-	@Override
-	public void setHeight(final String height) {
-		final int oldh = term.getClientHeight();
-		super.setHeight(height);
-		final int newh = term.getClientHeight();
-		// GWT.log("set height=" + height + " clientHeight="+oldh+" to "+newh);
-		if (newh != oldh) {
-			calculateRowsFromHeight();
-		}
-	}
-
 	private void calculateRowsFromHeight() {
-		int oldRows = rows;
 		final int h = term.getClientHeight() - (2 * padding);
 		rows = h / fontH;
-		config.setRows(rows);
 
-		// GWT.log("calculateRowsFromHeight: font=" + fontW + "x" + fontH
-		// + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
-		// + rows + ";size=" + getWidth() + "x" + getHeight());
-		if (oldRows != rows) {
-			handler.rowsChanged(rows);
-		}
-	}
-
-	private void calculateHeightFromRows() {
-		super.setHeight((rows * fontH) + "px");
-
-		// GWT.log("calculateHeightFromRows: font=" + fontW + "x" + fontH
-		// + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
-		// + rows + ";size=" + getWidth() + "x" + getHeight());
-
-		handler.paintableSizeChanged();
+		getLogger().info("calculateRowsFromHeight: font=" + fontW + "x" + fontH
+		 + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
+		 + rows + ";size=" + getWidth() + "x" + getHeight());
 	}
 
 	private void calculateColsFromWidth() {
-		int oldCols = cols;
 		final int w = term.getClientWidth();
 		cols = (w - 2 * paddingW) / fontW;
-		config.setCols(cols);
 		buffer.getStyle().setWidth((cols * fontW), Unit.PX);
 		prompt.getStyle().setWidth((cols * fontW), Unit.PX);
-//		 GWT.log("calculateColsFromWidth: font=" + fontW + "x" + fontH
-//		 + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
-//		 + rows + ";size=" + getWidth() + "x" + getHeight());
-		if (oldCols != cols) {
-			handler.colsChanged(cols);
-		}
+		getLogger().info("calculateColsFromWidth: font=" + fontW + "x" + fontH
+		 + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
+		 + rows + ";size=" + getWidth() + "x" + getHeight());
 	}
-
-	private void calculateWidthFromCols() {
-		final int w = cols * fontW;
-		super.setWidth((w + scrollbarW) + "px");
-		buffer.getStyle().setWidth(w, Unit.PX);
-		prompt.getStyle().setWidth(w, Unit.PX);
-
-//		 GWT.log("calculateWidthFromCols: font=" + fontW + "x" + fontH
-//		 + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
-//		 + rows + ";size=" + getWidth() + "x" + getHeight());
-
-		handler.paintableSizeChanged();
-	}
-
-	@Override
-	public void setWidth(final String width) {
-		final int oldw = term.getClientWidth();
-		super.setWidth(width);
-		final int neww = term.getClientWidth();
-//		 GWT.log("set width=" + width + " clientWidth="+oldw+" to "+neww);
-		if (neww != oldw) {
-			calculateColsFromWidth();
-		}
-	}
-	
-	private native int trace()/*-{
-		console.trace();
-	}-*/;
 
 	@Override
 	public void setFocus(final boolean focused) {
@@ -848,43 +714,14 @@ public class TextConsole extends FocusWidget {
 
 	public void setHandler(final TextConsoleHandler handler) {
 		this.handler = handler;
-
-	}
-
-	public void setRows(final int rows) {
-		// GWT.log("set rows = " + rows + " prev rows = " + getRows());
-		if (rows > 0) {
-			this.rows = rows;
-			calculateHeightFromRows();
-		} else {
-			calculateRowsFromHeight();
-		}
-	}
-
-	public int getRows() {
-		return rows;
-	}
-
-	public void setCols(final int cols) {
-		// GWT.log("set cols = " + cols + " prev cols = " + getCols());
-		if (cols > 0) {
-			this.cols = cols;
-			calculateWidthFromCols();
-		} else {
-			calculateColsFromWidth();
-		}
-	}
-
-	public int getCols() {
-		return cols;
 	}
 
 	public void reset() {
 		beforeChangeTerminal();
 		setPromptActive(false);
 		clearBuffer();
-		setPromptHeight(getRows());
-		print(config.getGreeting());
+		setPromptHeight(rows);
+		print(greeting);
 		prompt();
 	}
 
@@ -912,7 +749,7 @@ public class TextConsole extends FocusWidget {
 		for (int i = 0; i < promptRows; i++) {
 			newLine();
 		}
-		setPromptHeight(getRows());
+		setPromptHeight(rows);
 		scrollToEnd();
 
 		checkBufferLimit();
@@ -975,5 +812,34 @@ public class TextConsole extends FocusWidget {
 	protected void onLoad() {
 		super.onLoad();
 		init();
+	}
+
+	private static Logger getLogger() {
+		return Logger.getLogger(TextConsole.class.getName());
+	}
+
+	public void resized() {
+		calculateColsFromWidth();
+		calculateRowsFromHeight();
+		scrollToEnd();
+	}
+
+	public void setGreeting(String greeting) {
+		getLogger().info("setGreeting: greeting=" + greeting);
+		this.greeting = greeting;
+	}
+
+	public void setScrollLock(boolean scrollLock) {
+		getLogger().info("setScrollLock: scrollLock=" + scrollLock);
+		this.scrollLock = scrollLock;
+	}
+
+	public void setWrap(boolean wrap) {
+		getLogger().info("setWrap: wrap=" + wrap);
+		if (wrap) {
+			buffer.addClassName("soft-wrap");
+		} else {
+			buffer.removeClassName("soft-wrap");
+		}
 	}
 }

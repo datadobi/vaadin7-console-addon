@@ -1,11 +1,7 @@
 package org.vaadin8.console;
 
-import com.vaadin.server.Page;
-import com.vaadin.shared.Registration;
 import com.vaadin.ui.AbstractComponent;
 import com.vaadin.ui.Component;
-import com.vaadin.ui.JavaScript;
-import com.vaadin.ui.JavaScriptFunction;
 import org.vaadin8.console.ansi.ANSICodeConverter;
 import org.vaadin8.console.ansi.DefaultANSICodeConverter;
 import org.vaadin8.console.client.ConsoleClientRpc;
@@ -14,6 +10,7 @@ import org.vaadin8.console.client.ConsoleState;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
 /**
@@ -24,34 +21,12 @@ import java.util.regex.Pattern;
  * @since 22.05.2014 17:30:06
  * 
  */
-public class Console extends AbstractComponent implements Component.Focusable, Page.BrowserWindowResizeListener {
-
-	private Console console = this;
+public class Console extends AbstractComponent implements Component.Focusable {
 
 	// To process events from the client, we implement ServerRpc
 	private ConsoleServerRpc rpc = new ConsoleServerRpc() {
 
 		private static final long serialVersionUID = 443398479527027435L;
-
-		@Override
-		public void setHeight(String height) {
-			console.setHeight(height);
-		}
-
-		@Override
-		public void setWidth(String width) {
-			console.setWidth(width);
-		}
-
-		@Override
-		public void setCols(int cols) {
-			config.cols = cols;
-		}
-
-		@Override
-		public void setRows(int rows) {
-			config.rows = rows;
-		}
 
 		@Override
 		public void input(String input) {
@@ -64,33 +39,16 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		}
 
 		@Override
-		public void kill() {
-			handleKill();
+		public void controlChar(char c) {
+			handleControlChar(c);
 		}
-
-		@Override
-		public void pong() { handlePong(); }
 	};
 
-	public Console(final Console.Handler handler) {
-		this();
+	public Console(Console.Handler handler) {
 		setHandler(handler);
-	}
-
-	public Console() {
-		setHandler(new DefaultConsoleHandler());
 		setANSIToCSSConverter(new DefaultANSICodeConverter());
 		// To receive events from the client, we register ServerRpc
 		registerRpc(rpc);
-
-		// setCols(getCols());
-		// setRows(getRows());
-		setMaxBufferSize(getMaxBufferSize());
-		setWrap(isWrap());
-		setPrintPromptOnInput(isPrintPromptOnInput());
-		setScrollLock(isScrollLock());
-		setGreeting(getGreeting());
-		setPs(getPs());
 		reset();
 	}
 
@@ -100,50 +58,22 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		return (ConsoleState) super.getState();
 	}
 
+	@Override
+	protected ConsoleState getState(boolean markAsDirty) {
+		return (ConsoleState) super.getState(markAsDirty);
+	}
+
 	private static final long serialVersionUID = 590258219352859644L;
 	private Handler handler;
 	private ANSICodeConverter ansiToCSSconverter;
 	private boolean isConvertANSIToCSS = false;
-	private final HashMap<String, Command> commands = new HashMap<String, Command>();
-	private Command lastCommand;
-	private final Config config = new Config();
-
-	private static final String DEFAULT_PS = "}> ";
-	private static final String DEFAULT_GREETING = "Console ready.";
-	private static final int DEFAULT_BUFFER = 0;
-	private static final int DEFAULT_COLS = -1;
-	private static final int DEFAULT_ROWS = -1;
-	private static final boolean DEFAULT_WRAP = true;
-	private static final boolean DEFAULT_PRINT_PROMPT_ON_INPUT = true;
-	private static final boolean DEFAULT_SMART_SCROLL_TO_END = false;
-	private static final int MAX_COLS = 500;
-	private static final int MAX_ROWS = 200;
 
 	public boolean isWrap() {
-		return config.wrap;
+		return getState(false).wrap;
 	}
 
 	public void setWrap(final boolean wrap) {
-		config.wrap = wrap;
-		getRpcProxy(ConsoleClientRpc.class).setWrap(wrap);
-	}
-
-	/**
-	 * @return true, if entered by user text immediately will print to console,
-	 *         false otherwise
-	 */
-	public boolean isPrintPromptOnInput() {
-		return config.isPrintPromptOnInput;
-	}
-
-	/**
-	 * @param isPrintPromptOnInput
-	 *            if true - entered by user text immediately will be printed to
-	 *            console, nothing happens otherwise
-	 */
-	public void setPrintPromptOnInput(final boolean isPrintPromptOnInput) {
-		config.isPrintPromptOnInput = isPrintPromptOnInput;
-		getRpcProxy(ConsoleClientRpc.class).setPrintPromptOnInput(isPrintPromptOnInput);
+		getState().wrap = wrap;
 	}
 
 	/**
@@ -151,7 +81,7 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 	 *         was "end"
 	 */
 	public boolean isScrollLock() {
-		return config.isScrollLock;
+		return getState(false).scrollLock;
 	}
 
 	/**
@@ -160,8 +90,7 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 	 *            state was "end"
 	 */
 	public void setScrollLock(final boolean isScrollLock) {
-		config.isScrollLock = isScrollLock;
-		getRpcProxy(ConsoleClientRpc.class).setScrollLock(isScrollLock);
+		getState().scrollLock = isScrollLock;
 	}
 
 	/**
@@ -174,66 +103,6 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 	private Integer fonth;
 	private PrintStream printStream;
 	private String lastSuggestInput;
-	private List<CommandProvider> commandProviders;
-
-	private Registration registration;
-
-	@Override
-	public void attach()
-	{
-		super.attach();
-		registration = Page.getCurrent().addBrowserWindowResizeListener(this);
-		if (getParent().getId() == null) {
-			getParent().setId("console-container");
-		}
-		onResize();
-	}
-
-	@Override
-	public void detach()
-	{
-		if (registration != null) {
-			registration.remove();;
-		}
-		super.detach();
-	}
-
-	private void onResize()
-	{
-		JavaScript.getCurrent().addFunction("getContainerSize",
-				(JavaScriptFunction) args -> {
-					int width = (int) args.getNumber(0);
-					int height = (int) args.getNumber(1);
-					getRpcProxy(ConsoleClientRpc.class).setWidth(width);
-					getRpcProxy(ConsoleClientRpc.class).setHeight(height);
-				});
-		String id = getParent().getId();
-		JavaScript.getCurrent().execute("getContainerSize(document.getElementById('" + id + "').clientWidth,document.getElementById('" + id + "').clientHeight);");
-	}
-
-	@Override
-	public void browserWindowResized(Page.BrowserWindowResizeEvent event)
-	{
-		onResize();
-	}
-
-	/**
-	 * An inner class for holding the configuration data.
-	 */
-	public static class Config implements Serializable {
-
-		private static final long serialVersionUID = -812601232248504108L;
-
-		int maxBufferSize = DEFAULT_BUFFER;
-		int cols = DEFAULT_COLS;
-		int rows = DEFAULT_ROWS;
-		boolean wrap = DEFAULT_WRAP;
-		boolean isPrintPromptOnInput = DEFAULT_PRINT_PROMPT_ON_INPUT;
-		boolean isScrollLock = DEFAULT_SMART_SCROLL_TO_END;
-		String ps = DEFAULT_PS;
-		String greeting = DEFAULT_GREETING;
-
-	}
 
 	/**
 	 * Console Handler interface.
@@ -268,114 +137,7 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		 *
 		 * @param console
 		 */
-		void killReceived(Console console);
-
-		/**
-		 * Handle an exception during a Command execution.
-		 * 
-		 * @param console
-		 * @param e
-		 * @param cmd
-		 * @param argv
-		 */
-		void handleException(Console console, Exception e, Command cmd, String[] argv);
-
-		/**
-		 * Handle situation where a command could not be found.
-		 * 
-		 * @param console
-		 * @param argv
-		 */
-		void commandNotFound(Console console, String[] argv);
-
-	}
-
-	/**
-	 * Commands that can be executed against the Component instance. They
-	 * provide convenient string to method mapping. Basically, a Command is a
-	 * method that that can be executed in Component. It can have parameters or
-	 * not.
-	 * 
-	 */
-	public interface Command extends Serializable {
-
-		/**
-		 * Execute a Command with arguments.
-		 * 
-		 * @param console
-		 * @param argv
-		 * @return
-		 * @throws Exception
-		 */
-		public Object execute(Console console, String[] argv) throws Exception;
-
-		/**
-		 * Abort a running command.
-		 */
-		public void kill();
-
-		/**
-		 *
-		 * @return
-		 */
-		public boolean isKilled();
-
-		/**
-		 * Get usage information about this command.
-		 * 
-		 * @param console
-		 * @param argv
-		 * @return
-		 */
-		public String getUsage(Console console, String[] argv);
-	}
-
-	/**
-	 * Interface for providing Commands to the console. One can register a
-	 * command providers to console instead of individual commands to provide a
-	 * lot of commands.
-	 * 
-	 */
-	public interface CommandProvider extends Serializable {
-
-		/**
-		 * List all available command from this provider.
-		 * 
-		 * @param console
-		 * @return
-		 */
-		Set<String> getAvailableCommands(Console console);
-
-		/**
-		 * Get Command instance based on command name.
-		 * 
-		 * @param console
-		 * @param commandName
-		 * @return
-		 */
-		Command getCommand(Console console, String commandName);
-
-	}
-
-	public void addCommandProvider(final CommandProvider commandProvider) {
-		if (commandProviders == null) {
-			commandProviders = new ArrayList<CommandProvider>();
-		}
-		commandProviders.add(commandProvider);
-	}
-
-	public void removeCommandProvider(final CommandProvider commandProvider) {
-		if (commandProviders == null) {
-			return;
-		}
-		commandProviders.remove(commandProvider);
-	}
-
-	public void removeAllCommandProviders() {
-		if (commandProviders == null) {
-			return;
-		}
-		commandProviders.clear();
+		void controlCharReceived(Console console, char c);
 	}
 
 	/**
@@ -471,57 +233,9 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		handler.inputReceived(this, input);
 	}
 
-	private void handleKill() {
+	private void handleControlChar(char c) {
 
-		handler.killReceived(this);
-	}
-
-	private void handlePong() {
-		// invoked in separate thread, so use sleep instead of scheduling
-		try { Thread.sleep(500); } catch (InterruptedException e) { /* ignore */ }
-		ping();
-	}
-
-	Command parseAndExecuteCommand(final String input) {
-		final String[] argv = parseInput(input);
-		if (argv.length > 0) {
-			final Command c = getCommand(argv[0]);
-			if (c != null) {
-				final String result = executeCommand(c, argv);
-				if (result != null) {
-					System.out.println("# result: " + result);
-					print(result);
-				}
-			} else {
-				handler.commandNotFound(this, argv);
-			}
-			return c;
-		}
-		return null;
-	}
-
-	private String executeCommand(final Command cmd, final String[] argv) {
-		System.out.println("# executing command");
-		try {
-			lastCommand = cmd;
-			final Object r = cmd.execute(this, argv);
-			lastCommand = null;
-			System.out.println("# executed");
-			return r != null ? "" + r : null;
-		} catch (final Exception e) {
-			System.out.println("# excepted");
-			handler.handleException(this, e, cmd, argv);
-		}
-		return null;
-	}
-
-	void abortLastCommand() {
-		System.out.println("# aborting last command");
-		if (lastCommand != null) {
-			lastCommand.kill();
-			lastCommand = null;
-			print("[aborted]");
-		}
+		handler.controlCharReceived(this, c);
 	}
 
 	String parseCommandPrefix(final String input) {
@@ -529,46 +243,12 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 			return null;
 		}
 		if (!input.endsWith(" ")) {
-			final String[] argv = parseInput(input);
-			if (argv.length > 0) {
-				return argv[argv.length - 1];
+			List<String> argv = DefaultConsoleHandler.parseInput(input);
+			if (!argv.isEmpty()) {
+				return argv.get(argv.size() - 1);
 			}
 		}
 		return "";
-	}
-
-	private static String[] parseInput(final String input) {
-		if (input != null && !"".equals(input.trim())) {
-			final String[] temp = input.split(" ");
-			if (temp.length > 0) {
-				final List<String> parsed = new ArrayList<String>(temp.length);
-				String current = null;
-				for (final String element : temp) {
-					final int quotCount = count(element, '\"');
-					if (quotCount > 0 && quotCount % 2 != 0) {
-						// uneven number of quotes star or end combining params
-						if (current != null) {
-							parsed.add(current + " " + element.replaceAll("\"", "")); // end
-							current = null;
-						} else {
-							current = element.replaceAll("\"", ""); // start
-						}
-					} else if (current != null) {
-						current += " " + element.replaceAll("\"", "");
-					} else {
-						parsed.add(element.replaceAll("\"", ""));
-					}
-				}
-
-				// TODO: actually this is not quite right: We have an open quote
-				// somewhere. Exception maybe?
-				if (current != null) {
-					parsed.add(current.replaceAll("\"", ""));
-				}
-				return parsed.toArray(new String[] {});
-			}
-		}
-		return new String[] {};
 	}
 
 	protected static int count(final String sourceString, final char lookFor) {
@@ -590,7 +270,6 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 			getRpcProxy(ConsoleClientRpc.class).print("");
 			appendWithProcessingANSICodes(output);
 		} else {
-			System.out.println("# print");
 			getRpcProxy(ConsoleClientRpc.class).print(output);
 		}
 	}
@@ -611,69 +290,30 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 	}
 
 	public String getGreeting() {
-		return config.greeting;
+		return getState(false).greeting;
 	}
 
 	public String getPs() {
-		return config.ps;
+		return getState(false).ps;
 	}
 
 	public int getMaxBufferSize() {
-		return config.maxBufferSize;
-	}
-
-	public int getRows() {
-		return config.rows;
+		return getState(false).maxBufferSize;
 	}
 
 	public void setGreeting(final String greeting) {
-		config.greeting = greeting;
-		getRpcProxy(ConsoleClientRpc.class).setGreeting(greeting);
+		getState().greeting = greeting;
 	}
 
 	public void setPs(final String ps) {
-		config.ps = ps == null ? DEFAULT_PS : ps;
-		getRpcProxy(ConsoleClientRpc.class).setPs(config.ps);
+		getState().ps = ps;
 	}
 
 	public void setMaxBufferSize(final int lines) {
-		config.maxBufferSize = lines > 0 ? lines : 0;
-		getRpcProxy(ConsoleClientRpc.class).setMaxBufferSize(config.maxBufferSize);
-	}
-
-	public void setRows(final int rows) {
-		config.rows = rows;
-		if (config.rows < 1) {
-			config.rows = 1;
-		}
-		if (config.rows > MAX_ROWS) {
-			config.rows = MAX_ROWS;
-		}
-		getRpcProxy(ConsoleClientRpc.class).setRows(rows);
-	}
-
-	public int getCols() {
-		return config.cols;
-	}
-
-	public void setCols(final int cols) {
-		config.cols = cols;
-		if (config.cols < 1) {
-			config.cols = 1;
-		}
-		if (config.cols > MAX_COLS) {
-			config.cols = MAX_COLS;
-		}
-		getRpcProxy(ConsoleClientRpc.class).setCols(config.cols);
-	}
-
-	public void ping() {
-		System.out.println("# ping");
-		getRpcProxy(ConsoleClientRpc.class).ping();
+		getState().maxBufferSize = lines;
 	}
 
 	public void prompt() {
-		System.out.println("# prompt");
 		getRpcProxy(ConsoleClientRpc.class).prompt();
 	}
 
@@ -864,58 +504,7 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 		return printStream;
 	}
 
-	/* Generic command handling */
-
-	/**
-	 * Add a Command to this Console.
-	 * 
-	 * This will override the any commands of the same name available via
-	 * {@link CommandProvider}.
-	 */
-	public void addCommand(final String name, final Command cmd) {
-		commands.put(name, cmd);
-	}
-
-	/**
-	 * Remove a command from this console.
-	 * 
-	 * This does not remove Command available from {@link CommandProvider}.
-	 * 
-	 * @param cmdName
-	 */
-	public void removeCommand(final String cmdName) {
-		commands.remove(cmdName);
-	}
-
-	/**
-	 * Get a Command by its name.
-	 * 
-	 * @param cmdName
-	 * @return
-	 */
-	public Command getCommand(final String cmdName) {
-
-		// Try directly registered command first
-		Command cmd = commands.get(cmdName);
-		if (cmd != null) {
-			return cmd;
-		}
-
-		// Ask from the providers
-		if (commandProviders != null) {
-			for (final CommandProvider cp : commandProviders) {
-				cmd = cp.getCommand(this, cmdName);
-				if (cmd != null) {
-					return cmd;
-				}
-			}
-		}
-
-		// Not found
-		return null;
-	}
-
-	/**
+   /**
 	 * Get the current Console Handler.
 	 * 
 	 * @return
@@ -930,8 +519,8 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 	 * @see Handler
 	 * @param handler
 	 */
-	public void setHandler(final Handler handler) {
-		this.handler = handler != null ? handler : new DefaultConsoleHandler();
+	public void setHandler(Handler handler) {
+		this.handler = Objects.requireNonNull(handler);
 	}
 
 	public ANSICodeConverter getANSIToCSSConverter() {
@@ -960,22 +549,5 @@ public class Console extends AbstractComponent implements Component.Focusable, P
 	 */
 	public void setConvertANSIToCSS(boolean isConvertANSIToCSS) {
 		this.isConvertANSIToCSS = isConvertANSIToCSS;
-	}
-
-	/**
-	 * Get map of available commands in this Console.
-	 * 
-	 * @return
-	 */
-	public Set<String> getCommands() {
-		final Set<String> res = new HashSet<String>();
-		if (commandProviders != null) {
-			for (final CommandProvider cp : commandProviders) {
-				if (cp.getAvailableCommands(this) != null)
-					res.addAll(cp.getAvailableCommands(this));
-			}
-		}
-		res.addAll(commands.keySet());
-		return Collections.unmodifiableSet(res);
 	}
 }

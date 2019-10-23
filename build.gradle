@@ -1,0 +1,38 @@
+allprojects {
+    group = 'com.datadobi'
+    version = '1.4.2-SNAPSHOT'
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'maven-publish'
+
+    repositories {
+        mavenLocal()
+        maven {
+            url = 'http://repo.maven.apache.org/maven2'
+        }
+
+        maven {
+            url = 'http://maven.vaadin.com/vaadin-addons'
+        }
+
+        maven {
+            url = 'https://maven.vaadin.com/vaadin-prereleases'
+        }
+
+        maven {
+            url = 'http://oss.sonatype.org/content/repositories/vaadin-snapshots/'
+        }
+    }
+
+    sourceCompatibility = '1.8'
+
+    publishing {
+        publications {
+            maven(MavenPublication) {
+                from(components.java)
+            }
+        }
+    }
+}

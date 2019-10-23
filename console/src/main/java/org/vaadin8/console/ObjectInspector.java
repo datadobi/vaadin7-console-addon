@@ -3,6 +3,7 @@ package org.vaadin8.console;
 import java.beans.BeanInfo;
 import java.beans.Introspector;
 import java.beans.PropertyDescriptor;
+import java.io.PrintWriter;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -18,8 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.vaadin8.console.Console.Command;
-
 import com.vaadin.ui.Component;
 
 /**
@@ -31,7 +30,7 @@ import com.vaadin.ui.Component;
  * @author Sami Ekblad
  * 
  */
-public class ObjectInspector implements Serializable, Console.CommandProvider {
+public class ObjectInspector implements Serializable, CommandProvider {
 	private static final long serialVersionUID = -5001688079827306472L;
 	private static final List<String> OBJECT_BLACKLIST = Arrays
 			.asList(new String[] { "equals", "class", "hashCode", "notify", "notifyAll", "toString", "wait" });
@@ -219,35 +218,35 @@ public class ObjectInspector implements Serializable, Console.CommandProvider {
 		return getIgnoredCommands().contains(commandName);
 	}
 
-	protected static Object[] argvToParams(final String[] argv, final Class<?>[] pt) {
-		if (pt.length != argv.length - 1) {
+	protected static Object[] argvToParams(final List<String> argv, final Class<?>[] pt) {
+		if (pt.length != argv.size() - 1) {
 			throw new IllegalArgumentException("Invalid number of parameters");
 		}
-		final Object[] args = new Object[argv.length - 1];
-		for (int j = 1; j < argv.length; j++) {
+		final Object[] args = new Object[argv.size() - 1];
+		for (int j = 1; j < argv.size(); j++) {
 			if (pt[j - 1] == String.class) {
-				args[j - 1] = argv[j];
+				args[j - 1] = argv.get(j);
 			} else if (pt[j - 1] == Byte.class || pt[j - 1] == byte.class) {
-				args[j - 1] = Byte.parseByte(argv[j]);
+				args[j - 1] = Byte.parseByte(argv.get(j));
 			} else if (pt[j - 1] == Character.class || pt[j - 1] == char.class) {
-				args[j - 1] = argv[j].charAt(0);
+				args[j - 1] = argv.get(j).charAt(0);
 			} else if (pt[j - 1] == Long.class || pt[j - 1] == long.class) {
-				args[j - 1] = Long.parseLong(argv[j]);
+				args[j - 1] = Long.parseLong(argv.get(j));
 			} else if (pt[j - 1] == Integer.class || pt[j - 1] == int.class) {
-				args[j - 1] = Integer.parseInt(argv[j]);
+				args[j - 1] = Integer.parseInt(argv.get(j));
 			} else if (pt[j - 1] == Boolean.class || pt[j - 1] == boolean.class) {
-				args[j - 1] = Boolean.parseBoolean(argv[j]);
+				args[j - 1] = Boolean.parseBoolean(argv.get(j));
 			} else if (pt[j - 1] == Float.class || pt[j - 1] == float.class) {
-				args[j - 1] = Float.parseFloat(argv[j]);
+				args[j - 1] = Float.parseFloat(argv.get(j));
 			} else if (pt[j - 1] == Double.class || pt[j - 1] == double.class) {
-				args[j - 1] = Float.parseFloat(argv[j]);
+				args[j - 1] = Float.parseFloat(argv.get(j));
 			} else if (pt[j - 1].isEnum()) {
 				Field e;
 				try {
-					e = pt[j - 1].getDeclaredField(argv[j].toUpperCase());
+					e = pt[j - 1].getDeclaredField(argv.get(j).toUpperCase());
 					args[j - 1] = e.get(null);
 				} catch (final Exception e1) {
-					throw new IllegalArgumentException("Enum not found: " + argv[j].toUpperCase(), e1);
+					throw new IllegalArgumentException("Enum not found: " + argv.get(j).toUpperCase(), e1);
 				}
 			}
 		}
@@ -274,7 +273,7 @@ public class ObjectInspector implements Serializable, Console.CommandProvider {
 	 * Method wrapper that serializes nicely.
 	 * 
 	 */
-	private static class Caller implements Console.Command, Serializable {
+	private static class Caller implements Command, Serializable {
 
 		private static final long serialVersionUID = -810707579200844512L;
 
@@ -316,7 +315,7 @@ public class ObjectInspector implements Serializable, Console.CommandProvider {
 			return rm.invoke(theObject);
 		}
 
-		public Object write(final String[] argv) throws SecurityException, NoSuchMethodException, IllegalArgumentException, IllegalAccessException,
+		public Object write(final List<String> argv) throws SecurityException, NoSuchMethodException, IllegalArgumentException, IllegalAccessException,
 				InvocationTargetException {
 			return write(parseWriteParams(argv));
 		}
@@ -325,25 +324,28 @@ public class ObjectInspector implements Serializable, Console.CommandProvider {
 			return paramTypes;
 		}
 
-		private Object[] parseWriteParams(final String[] argv) throws SecurityException, NoSuchMethodException {
+		private Object[] parseWriteParams(final List<String> argv) throws SecurityException, NoSuchMethodException {
 			if (wm == null) {
 				wm = theObject.getClass().getMethod(writeMethod, paramTypes);
 			}
 			return argvToParams(argv, wm.getParameterTypes());
 		}
 
-		public Object execute(final Console console, final String[] argv) throws Exception {
-			// public Object execute(final String[] argv) throws Exception {
-
-			if (argv == null || argv.length < 1) {
+		@Override
+		public void execute(List<String> argv, PrintWriter out, PrintWriter err) throws Exception {
+			if (argv == null || argv.isEmpty()) {
 				throw new IllegalArgumentException("Missing command");
 			}
 
-			if (argv.length > 1 && !isParamTypesOkForConsole(getParameterTypes())) {
+			if (argv.size() > 1 && !isParamTypesOkForConsole(getParameterTypes())) {
 				throw new IllegalArgumentException("Unsupported parameter types");
 			}
 
-			if (argv.length == 1 && isReadable()) {
+			out.print(exec(argv));
+		}
+
+		private Object exec(List<String> argv) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+			if (argv.size() == 1 && isReadable()) {
 				// Read
 				return read();
 			} else if (isWritable()) {
@@ -360,23 +362,13 @@ public class ObjectInspector implements Serializable, Console.CommandProvider {
 			return null;
 		}
 
-		@Override
-		public void kill() {
-
-		}
-
-		@Override
-		public boolean isKilled() {
-			return false;
-		}
-
-		public String getUsage(final Console console, final String[] argv) {
+		public String getUsage(final Console console, List<String> argv) {
 			return null;
 		}
 	}
 
-	public String getCommandUsage(final String[] argv) {
-		return argv[0] + " " + paramsToString(getCommandParams(argv[0]));
+	public String getCommandUsage(final List<String> argv) {
+		return argv.get(0) + " " + paramsToString(getCommandParams(argv.get(0)));
 	}
 
 	private static String paramsToString(final Class<?>[] paramTypes) {
