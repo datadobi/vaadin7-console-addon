@@ -10,6 +10,10 @@ import com.vaadin.shared.communication.ServerRpc;
  * 
  */
 public interface ConsoleServerRpc extends ServerRpc {
+	void previousCommand();
+
+	void nextCommand();
+
 	void input(String input);
 
 	void suggest(String input);

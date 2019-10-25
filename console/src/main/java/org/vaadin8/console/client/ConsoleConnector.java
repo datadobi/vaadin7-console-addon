@@ -5,7 +5,6 @@ import com.google.gwt.event.dom.client.FocusEvent;
 import com.google.gwt.event.dom.client.FocusHandler;
 import com.google.gwt.user.client.ui.Widget;
 import com.vaadin.client.communication.RpcProxy;
-import com.vaadin.client.communication.StateChangeEvent;
 import com.vaadin.client.ui.AbstractComponentConnector;
 import com.vaadin.client.ui.layout.ElementResizeEvent;
 import com.vaadin.client.ui.layout.ElementResizeListener;
@@ -37,58 +36,35 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 		// implementation
 		registerRpc(ConsoleClientRpc.class, new ConsoleClientRpc() {
 			@Override
+			public void setInput(String input) {
+				getWidget().setInput(input);
+			}
+
+			@Override
 			public void print(String text) {
 				getWidget().print(text);
 			}
 
 			@Override
-			public void printWithClass(String text, String className) {
+			public void print(String text, String className) {
 				getWidget().printWithClass(text, className);
 			}
 
 			@Override
 			public void println(String text) {
-				getWidget().println(text);
+				print(text);
+				getWidget().newLine();
 			}
 
 			@Override
-			public void printlnWithClass(String text, String className) {
-				getWidget().printlnWithClass(text, className);
+			public void println(String text, String className) {
+				print(text, className);
+				getWidget().newLine();
 			}
 
 			@Override
-			public void append(String text) {
-				getWidget().append(text);
-			}
-
-			@Override
-			public void appendWithClass(String text, String className) {
-				getWidget().appendWithClass(text, className);
-			}
-
-			@Override
-			public void prompt() {
-				getWidget().prompt();
-			}
-
-			@Override
-			public void prompt(String inputText) {
-				getWidget().prompt(inputText);
-			}
-
-			@Override
-			public void ff() {
-				getWidget().formFeed();
-			}
-
-			@Override
-			public void cr() {
-				getWidget().carriageReturn();
-			}
-
-			@Override
-			public void lf() {
-				getWidget().carriageReturn();
+			public void newline() {
+				getWidget().newLine();
 			}
 
 			@Override
@@ -97,38 +73,13 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			}
 
 			@Override
-			public void reset() {
-				getWidget().reset();
-			}
-
-			@Override
-			public void newLine() {
-				getWidget().newLine();
-			}
-
-			@Override
-			public void newLineIfNotEndsWithNewLine() {
-				getWidget().newLineIfNotEndsWithNewLine();
-			}
-
-			@Override
 			public void scrollToEnd() {
 				getWidget().scrollToEnd();
 			}
 
 			@Override
-			public void focusInput() {
-				getWidget().focusInput();
-			}
-
-			@Override
 			public void bell() {
 				getWidget().bell();
-			}
-
-			@Override
-			public void clearHistory() {
-				getWidget().clearCommandHistory();
 			}
 		});
 
@@ -140,13 +91,23 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			}
 
 			@Override
-			public void suggest(String input) {
-				rpc.suggest(input);
+			public void controlChar(char c) {
+				rpc.controlChar(c);
 			}
 
 			@Override
-			public void controlChar(char c) {
-				rpc.controlChar(c);
+			public void previousCommand() {
+				rpc.previousCommand();
+			}
+
+			@Override
+			public void nextCommand() {
+				rpc.nextCommand();
+			}
+
+			@Override
+			public void suggest(String input) {
+				rpc.suggest(input);
 			}
 		});
 

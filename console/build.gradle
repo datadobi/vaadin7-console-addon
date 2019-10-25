@@ -18,11 +18,15 @@ vaadinAddon {
     /**
      * An array of paths relative to webroot (eg. '/VAADIN/addons/myaddon/myaddon.scss') where CSS and SCSS files for an addon can be found.
      */
-    styles ['/VAADIN/org/vaadin8/console/public/console/styles.css']
+    styles['/VAADIN/org/vaadin8/console/public/console/styles.css']
 }
 
-jar{
+jar {
     from sourceSets.main.allJava
+}
+
+compileJava {
+    options.debug
 }
 
 description = 'Console Add-on'

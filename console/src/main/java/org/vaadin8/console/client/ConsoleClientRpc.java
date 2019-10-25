@@ -11,42 +11,18 @@ import com.vaadin.shared.communication.ClientRpc;
  * 
  */
 public interface ConsoleClientRpc extends ClientRpc {
+	void setInput(String input);
+
 	void print(String text);
-
-	void printWithClass(String text, String className);
-
+	void print(String text, String className);
 	void println(String text);
+	void println(String text, String className);
 
-	void printlnWithClass(String text, String className);
-
-	void append(String text);
-
-	void appendWithClass(String text, String className);
-
-	void prompt();
-
-	void prompt(String inputText);
-
-	void ff();
-
-	void cr();
-
-	void lf();
+	void newline();
 
 	void clearBuffer();
 
-	void reset();
-
-	void newLine();
-
-	void newLineIfNotEndsWithNewLine();
-
 	void scrollToEnd();
 
-	void focusInput();
-
 	void bell();
-
-	void clearHistory();
-
 }

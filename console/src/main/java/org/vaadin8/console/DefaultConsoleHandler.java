@@ -2,15 +2,15 @@ package org.vaadin8.console;
 
 import com.vaadin.server.VaadinSession;
 import com.vaadin.shared.communication.PushMode;
+import com.vaadin.ui.Component;
 import com.vaadin.ui.UI;
 import org.vaadin8.console.Console.Handler;
 
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Default handler for console.
@@ -20,34 +20,20 @@ public class DefaultConsoleHandler implements Handler {
 
 	private static final long serialVersionUID = 1L;
 
-	private List<CommandProvider> commandProviders;
-	private AtomicReference<Future<?>> lastCommand;
+	public final String outputStyle = null;
+	public final String errorStyle = "term-color-red";
+	private final CommandHandler handler;
+
+	private List<String> history = new ArrayList<>();
+	private int historyIndex = 0;
+
 	private final ExecutorService executorService;
+	private AtomicReference<Future<?>> runningCommand;
 
-	public DefaultConsoleHandler(ExecutorService executorService) {
+	public DefaultConsoleHandler(ExecutorService executorService, CommandHandler handler) {
 		this.executorService = executorService;
-		lastCommand = new AtomicReference<>();
-	}
-
-	public void addCommandProvider(final CommandProvider commandProvider) {
-		if (commandProviders == null) {
-			commandProviders = new ArrayList<CommandProvider>();
-		}
-		commandProviders.add(commandProvider);
-	}
-
-	public void removeCommandProvider(final CommandProvider commandProvider) {
-		if (commandProviders == null) {
-			return;
-		}
-		commandProviders.remove(commandProvider);
-	}
-
-	public void removeAllCommandProviders() {
-		if (commandProviders == null) {
-			return;
-		}
-		commandProviders.clear();
+		this.handler = handler;
+		runningCommand = new AtomicReference<>();
 	}
 
 	static List<String> parseInput(final String input) {
@@ -141,48 +127,36 @@ public class DefaultConsoleHandler implements Handler {
 		return result;
 	}
 
-	public Set<String> getSuggestions(final Console console, final String input) {
-
-		final String prefix = console.parseCommandPrefix(input);
-		if (prefix != null) {
-			final Set<String> matches = new HashSet<String>();
-			final Set<String> cmds = getCommands(console);
-			for (final String cmd : cmds) {
-				if (cmd.startsWith(prefix)) {
-					matches.add(cmd);
-				}
-			}
-			return matches;
-		}
-		return null;
-	}
-
-	public void inputReceived(final Console console, final String lastInput) {
-		List<String> argv = parseInput(lastInput);
+	public void inputReceived(final Console console, final String input) {
+		String trimmedInput = input.trim();
+		List<String> argv = parseInput(trimmedInput);
 
 		if (!argv.isEmpty()) {
-			Command command = getCommand(console, argv.get(0));
-			if (command != null) {
-				executeCommand(console, command, argv);
-			} else {
-				console.print("ERROR: " + argv.get(0) + ": command not found.");
-				console.prompt();
-			}
-		} else {
-			console.prompt();
+			addToHistory(trimmedInput);
 		}
-	}
 
-	private void executeCommand(Console console, Command cmd, List<String> argv) {
 		try {
-			lastCommand.set(executorService.submit(() -> {
+			runningCommand.set(executorService.submit(() -> {
+				ConsoleQueue outputQueue = new ConsoleQueue(console);
+				Timer t = new Timer();
+				t.schedule(
+						new TimerTask() {
+							@Override
+							public void run() {
+								outputQueue.flush();
+							}
+						},
+						250, 250
+				);
+				String newPs = null;
+				boolean aborted = false;
 				try {
-					try (PrintWriter out = new PrintWriter(new ConsoleWriter(console), true);
-						 PrintWriter err = new PrintWriter(new ConsoleWriter(console), true)) {
+					try (PrintWriter out = new PrintWriter(new ConsoleWriter(outputQueue, outputStyle), true);
+						 PrintWriter err = new PrintWriter(new ConsoleWriter(outputQueue, errorStyle), true)) {
 						try {
-							cmd.execute(argv, out, err);
+							newPs = handler.execute(argv, out, err);
 						} catch (InterruptedException | InterruptedIOException | CancellationException e) {
-							err.println("<aborted>");
+							aborted = true;
 						} catch (Throwable e) {
 							StringWriter w = new StringWriter();
 							PrintWriter pw = new PrintWriter(w);
@@ -192,8 +166,21 @@ public class DefaultConsoleHandler implements Handler {
 						}
 					}
 				} finally {
-					lastCommand.set(null);
-					run(console, console::prompt);
+					t.cancel();
+					outputQueue.flush();
+					runningCommand.set(null);
+
+					boolean finalAborted = aborted;
+					String finalNewPs = newPs;
+					ConsoleQueue.run(console, () -> {
+						if (finalAborted) {
+							console.println("<aborted>", errorStyle);
+						}
+						if (finalNewPs != null) {
+							console.setPs(finalNewPs);
+						}
+						console.prompt();
+					});
 				}
 			}));
 		} catch (final Exception e) {
@@ -204,47 +191,151 @@ public class DefaultConsoleHandler implements Handler {
 
 	@Override
 	public void controlCharReceived(Console console, char c) {
-		if (Character.toLowerCase(c) == 'c') {
-			Future<?> future = lastCommand.get();
-			if (future != null) {
-				future.cancel(true);
-			}
+		if (c == 'C' || c == '[') {
+			abortCommand();
 		}
 	}
 
-	public Command getCommand(Console console, final String cmdName) {
+	public boolean isCommandRunning() {
+		return runningCommand.get() != null;
+	}
 
-		// Ask from the providers
-		if (commandProviders != null) {
-			for (final CommandProvider cp : commandProviders) {
-				Command cmd = cp.getCommand(console, cmdName);
-				if (cmd != null) {
-					return cmd;
+	public boolean abortCommand() {
+		Future<?> future = runningCommand.get();
+		if (future != null) {
+			future.cancel(true);
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	private void addToHistory(String input) {
+		history.add(input);
+		historyIndex = history.size();
+	}
+
+	@Override
+	public void clearHistory(Console console) {
+		history.clear();
+		historyIndex = 0;
+	}
+
+	@Override
+	public String nextCommand(Console console) {
+		historyIndex++;
+		if (historyIndex >= history.size()) {
+			historyIndex = history.size();
+			return "";
+		} else {
+			return history.get(historyIndex);
+		}
+	}
+
+	@Override
+	public String previousCommand(Console console) {
+		historyIndex--;
+		if (historyIndex < 0) {
+			historyIndex = 0;
+			return null;
+		} else {
+			return history.get(historyIndex);
+		}
+	}
+
+	@Override
+	public void suggest(Console console, String input) {
+		executorService.submit(() -> {
+			String suggestion = null;
+			try {
+				suggestion = handler.suggest(parseInput(input));
+			} catch (InterruptedException e) {
+				// Ignored
+			} catch (Exception e) {
+				// Ignored
+			} finally {
+				String finalSuggestion = suggestion;
+				ConsoleQueue.run(console, () -> {
+					if (finalSuggestion == null) {
+						console.bell();
+						console.prompt(input);
+					} else {
+						console.prompt(finalSuggestion);
+					}
+				});
+			}
+		});
+	}
+
+	private static class ConsoleQueue {
+		public static final int QUEUE_SIZE = 20;
+		public static final int AUTOFLUSH_SIZE = 20;
+		public static final int BATCH_SIZE = 20;
+
+		private final Console console;
+		private BlockingQueue<Consumer<Console>> workQueue;
+
+		public ConsoleQueue(Console console) {
+			this.console = console;
+			this.workQueue = new ArrayBlockingQueue<>(QUEUE_SIZE);
+		}
+
+		public synchronized void queue(Consumer<Console> task) throws InterruptedIOException {
+			try {
+				workQueue.put(task);
+			} catch (InterruptedException e) {
+				throw new InterruptedIOException();
+			}
+//			if (workQueue.size() >= AUTOFLUSH_SIZE) {
+//				flush();
+//			}
+		}
+
+		public void flush() {
+			if (workQueue.isEmpty()) {
+				return;
+			}
+
+			run(console, this::flushQueue);
+		}
+
+		static void run(Component component, Runnable r) {
+			UI ui = component.getUI();
+			if (ui != null) {
+				VaadinSession session = ui.getSession();
+				if (session != null) {
+					if (session.hasLock()) {
+						r.run();
+					} else {
+						session.access(() -> {
+							r.run();
+							if (ui.getPushConfiguration().getPushMode() == PushMode.MANUAL) {
+								ui.push();
+							}
+						});
+					}
 				}
 			}
 		}
 
-		// Not found
-		return null;
-	}
-
-	public Set<String> getCommands(Console console) {
-		final Set<String> res = new HashSet<>();
-		if (commandProviders != null) {
-			for (final CommandProvider cp : commandProviders) {
-				if (cp.getAvailableCommands(console) != null)
-					res.addAll(cp.getAvailableCommands(console));
+		private void flushQueue() {
+			Consumer<Console> consumer;
+			int itemsFlushed = 0;
+			while((consumer = workQueue.poll()) != null && itemsFlushed < BATCH_SIZE) {
+				consumer.accept(console);
+				itemsFlushed++;
 			}
 		}
-		return Collections.unmodifiableSet(res);
 	}
 
 	private static class ConsoleWriter extends Writer {
-		private final Console console;
+		private final ConsoleQueue consoleQueue;
+		private final String className;
 		private StringBuilder buffer;
 
-		public ConsoleWriter(Console console) {
-			this.console = console;
+		public ConsoleWriter(ConsoleQueue console, String className) {
+			this.consoleQueue = console;
+			this.className = className;
 			buffer = new StringBuilder();
 		}
 
@@ -255,35 +346,52 @@ public class DefaultConsoleHandler implements Handler {
 
 		@Override
 		public void flush() throws IOException {
-			if (buffer.length() > 0) {
-				String text = buffer.toString();
-				buffer.setLength(0);
-				run(console, () -> console.print(text));
+			flush(false);
+		}
+
+		private void flush(boolean flushRemaining) throws InterruptedIOException {
+			if (buffer.length() == 0) {
+				return;
+			}
+
+			int start = 0;
+			int end;
+			List<String> lines = new ArrayList<>();
+			while (start < buffer.length() && (end = buffer.indexOf("\n", start)) != -1) {
+				String line = buffer.substring(start, end);
+				lines.add(line);
+				start = end + 1;
+			}
+
+			String tail;
+			if (start < buffer.length()) {
+				String remaining = buffer.substring(start);
+
+				if (flushRemaining) {
+					lines.add(remaining);
+					tail = null;
+				} else {
+					tail = remaining;
+				}
+			} else {
+				tail = null;
+			}
+
+			buffer.setLength(0);
+
+			if (!lines.isEmpty()) {
+				for (String line : lines) {
+					consoleQueue.queue(c -> c.println(line, className));
+				}
+				if (tail != null) {
+					consoleQueue.queue(c -> c.print(tail, className));
+				}
 			}
 		}
 
 		@Override
 		public void close() throws IOException {
-			flush();
-		}
-	}
-
-	private static void run(Console console, Runnable r) {
-		UI ui = console.getUI();
-		if (ui != null) {
-			VaadinSession session = ui.getSession();
-			if (session != null) {
-				if (session.hasLock()) {
-					r.run();
-				} else {
-					session.access(() -> {
-						r.run();
-						if (ui.getPushConfiguration().getPushMode() == PushMode.MANUAL) {
-							ui.push();
-						}
-					});
-				}
-			}
+			flush(true);
 		}
 	}
 }

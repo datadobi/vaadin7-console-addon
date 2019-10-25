@@ -1,6 +1,5 @@
 allprojects {
     group = 'com.datadobi'
-    version = '1.4.2-SNAPSHOT'
 }
 
 subprojects {

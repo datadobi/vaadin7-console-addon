@@ -12,8 +12,7 @@ import org.vaadin8.console.Console;
 
 import javax.servlet.annotation.WebServlet;
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.Executors;
 
 @Theme("demo")
@@ -23,7 +22,6 @@ import java.util.concurrent.Executors;
 public class DemoUI extends UI {
 
 	protected static final String HELP = "Sample Vaadin shell. Following command are available:\n";
-	private ObjectInspector inspector;
 
 	@WebServlet(value = "/*", asyncSupported = true)
 	@VaadinServletConfiguration(productionMode = false, ui = DemoUI.class, widgetset = "org.vaadin8.console.demo.DemoWidgetSet")
@@ -34,83 +32,102 @@ public class DemoUI extends UI {
 	protected void init(VaadinRequest request) {
 		getPage().setTitle("Vaadin Console Demo");
 
+		TabSheet tabs = new TabSheet();
+		tabs.setSizeFull();
+		setContent(tabs);
+
+		tabs.addTab(createConsole(), "Console 1");
+		tabs.addTab(createConsole(), "Console 2");
+		tabs.addTab(createConsole(), "Console 3");
+	}
+
+	private Component createConsole() {
 		VerticalLayout vl = new VerticalLayout();
 		vl.setSizeFull();
-		setContent(vl);
 
-		DefaultConsoleHandler handler = new DefaultConsoleHandler(Executors.newSingleThreadExecutor());
+		DefaultConsoleHandler handler = new DefaultConsoleHandler(Executors.newSingleThreadExecutor(), new CommandHandler());
 		// Create a console
 		final Console console = new Console(handler);
 		vl.addComponent(console);
 
 		// Size and greeting
 		console.setPs("> ");
-		console.setMaxBufferSize(24);
+		console.setMaxBufferSize(200);
 		console.setGreeting("Welcome to Vaadin console demo.");
 		console.reset();
 		console.setSizeFull();
 		console.focus();
 
-		// Publish the methods in the Console class itself for testing purposes.
-		handler.addCommandProvider(inspector = new ObjectInspector(console));
-
-		DefaultCommandProvider commandProvider = new DefaultCommandProvider();
-		handler.addCommandProvider(commandProvider);
-
-		// # 2
-		Command systemCommand = new Command() {
-			private static final long serialVersionUID = -5733237166568671987L;
-
-			private Process process;
-
-            @Override
-            public void execute(List<String> argv, PrintWriter out, PrintWriter err) throws Exception {
-				ProcessBuilder pb = new ProcessBuilder(argv.toArray(new String[0]));
-				process = pb.start();
-				StringBuilder o;
-				try {
-					o = new StringBuilder();
-					Thread t = new Thread(() -> {
-						InputStream in = process.getInputStream();
-						try (BufferedReader r = new BufferedReader(new InputStreamReader(in))) {
-							String line;
-							while ((line = r.readLine()) != null) {
-								out.println(line);
-							}
-						} catch (IOException e) {
-							o.append("[truncated]");
-						}
-					});
-					t.start();
-					t.join();
-				} finally {
-					process.destroy();
-				}
-			}
-		};
-
-		// #
-		commandProvider.addCommand("ls", systemCommand);
-		commandProvider.addCommand("sleep", systemCommand);
-
-		// Add sample command
-		DummyCmd dummy = new DummyCmd();
-		commandProvider.addCommand("dir", dummy);
-		commandProvider.addCommand("cd", dummy);
-		commandProvider.addCommand("mkdir", dummy);
-		commandProvider.addCommand("rm", dummy);
-		commandProvider.addCommand("pwd", dummy);
-		commandProvider.addCommand("more", dummy);
-		commandProvider.addCommand("less", dummy);
-		commandProvider.addCommand("exit", dummy);
+		return vl;
 	}
 
-	public static class DummyCmd implements Command {
-		private static final long serialVersionUID = -7725047596507450670L;
+	private static class CommandHandler implements org.vaadin8.console.CommandHandler {
+		private static Set<String> validCommands = new HashSet<>(Arrays.asList("ls", "sleep", "echo"));
 
-        @Override
-        public void execute(List<String> argv, PrintWriter out, PrintWriter err) throws Exception {
-			out.println("Sorry, this is not a real shell and '" + argv.get(0) + "' is unsupported. Try 'help' instead.");
+		@Override
+		public String suggest(List<String> argv) throws Exception {
+			if (argv.size() != 1) {
+				return null;
+			}
+
+			String cmd = argv.get(0).toLowerCase();
+			for (String validCommand : validCommands) {
+				if (validCommand.startsWith(cmd.toLowerCase()) && !validCommand.equals(cmd)) {
+					return validCommand;
+				}
+			}
+			return null;
+		}
+
+		@Override
+		public String execute(List<String> argv, PrintWriter out, PrintWriter err) throws Exception {
+			if (argv.isEmpty()) {
+				return null;
+			}
+
+			String cmd = argv.get(0);
+			if (validCommands.contains(cmd.toLowerCase())) {
+				executeSystemCommand(argv, out, err);
+			} else {
+				err.println("command not found: " + cmd);
+			}
+			return null;
+		}
+
+		public void executeSystemCommand(List<String> argv, PrintWriter out, PrintWriter err) throws Exception {
+			ProcessBuilder pb = new ProcessBuilder(argv.toArray(new String[0]));
+			Process process = pb.start();
+			try {
+				Thread outReader = new Thread(() -> {
+					InputStream in = process.getInputStream();
+					try (BufferedReader r = new BufferedReader(new InputStreamReader(in))) {
+						String line;
+						while ((line = r.readLine()) != null) {
+							out.println(line);
+						}
+					} catch (IOException e) {
+						out.println("[truncated]");
+					}
+				});
+				Thread errReader = new Thread(() -> {
+					InputStream in = process.getErrorStream();
+					try (BufferedReader r = new BufferedReader(new InputStreamReader(in))) {
+						String line;
+						while ((line = r.readLine()) != null) {
+							err.println(line);
+						}
+					} catch (IOException e) {
+						err.println("[truncated]");
+					}
+				});
+
+				outReader.start();
+				errReader.start();
+				outReader.join();
+				errReader.join();
+			} finally {
+				process.destroy();
+			}
 		}
 	}
 }
