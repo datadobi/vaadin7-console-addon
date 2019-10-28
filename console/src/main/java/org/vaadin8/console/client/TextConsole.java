@@ -50,7 +50,6 @@ public class TextConsole extends FocusWidget {
     private final InputElement input;
     private HandlerRegistration clickHandler;
     private HandlerRegistration keyHandler;
-    private HandlerRegistration focusHandler;
     private int fontW = -1;
     private int fontH = -1;
     private int scrollbarW = -1;
@@ -154,6 +153,7 @@ public class TextConsole extends FocusWidget {
                     handleCommandHistoryBrowse(event.getNativeKeyCode());
                 } else if (event.getNativeKeyCode() == KeyCodes.KEY_TAB) {
 					event.preventDefault();
+                    handleSuggest();
                     handleSuggest();
                 } else if (event.getNativeKeyCode() == KeyCodes.KEY_BACKSPACE && getInputLength() == 0) {
                     bell();
@@ -325,16 +325,6 @@ public class TextConsole extends FocusWidget {
 		}
 		return last;
 	}
-
-	private void focusPrompt() {
-        input.focus();
-
-        // Focus to end
-        final String s = getInput();
-        if (s != null && s.length() > 0) {
-            setSelectionRange(input, s.length(), s.length());
-        }
-    }
 
     private native void setSelectionRange(Element input, int selectionStart, int selectionEnd)/*-{
         if (input.setSelectionRange) {
@@ -582,10 +572,6 @@ public class TextConsole extends FocusWidget {
         if (clickHandler != null) {
             clickHandler.removeHandler();
             clickHandler = null;
-        }
-        if (focusHandler != null) {
-            focusHandler.removeHandler();
-            focusHandler = null;
         }
         if (keyHandler != null) {
             keyHandler.removeHandler();
