@@ -27,7 +27,6 @@ public class TextConsole extends FocusWidget {
     private List<HandlerRegistration> handlers = new ArrayList<>();
     private int fontW = -1;
     private int fontH = -1;
-    private int scrollbarW = -1;
     private int rows;
     private int cols;
     private String tabs = DEFAULT_TABS;
@@ -103,7 +102,6 @@ public class TextConsole extends FocusWidget {
         }
 
         MouseClickHandler mouseHandler = new MouseClickHandler(event -> {
-            getLogger().info("clicked()");
             setFocus(true);
         });
 
@@ -151,7 +149,7 @@ public class TextConsole extends FocusWidget {
     }
 
     void setPromptVisible(final boolean active) {
-        getLogger().info("setPromptActive(" + active + ")");
+        // getLogger().debug("setPromptActive(" + active + ")");
         if (active && !isPromptActive()) {
             prompt.getStyle().setDisplay(Display.BLOCK);
             ensureFocus();
@@ -174,18 +172,13 @@ public class TextConsole extends FocusWidget {
 
         updateFontDimensions();
 
-        scrollbarW = getScrollbarWidth();
         final String padStr = term.getStyle().getPadding();
         if (padStr != null && padStr.endsWith("px")) {
             padding = Integer.parseInt(padStr.substring(0, padStr.length() - 2));
         } else {
-            getLogger().info("using default padding: 1x2");
             padding = 1;
             paddingW = 2;
         }
-
-        getLogger().info("init: font=" + fontW + "x" + fontH + ";scrollbar="
-                + scrollbarW + ";size=" + getWidth() + "x" + getHeight());
 
         setPs(">");
         setMaxBufferSize(maxBufferSize);
@@ -286,7 +279,7 @@ public class TextConsole extends FocusWidget {
     }-*/;
 
     public void newLine() {
-        getLogger().info("newline");
+        // getLogger().debug("newline");
         beforeChangeTerminal();
         appendNewLine();
         checkBufferLimit();
@@ -304,7 +297,7 @@ public class TextConsole extends FocusWidget {
     }
 
     public void setPs(final String string) {
-        getLogger().info("setPs: ps=" + string);
+        // getLogger().debug("setPs: ps=" + string);
         cleanPs = Util.escapeHTML(string);
         cleanPs = cleanPs.replaceAll(" ", "&nbsp;");
         ps.setInnerHTML(cleanPs);
@@ -379,10 +372,6 @@ public class TextConsole extends FocusWidget {
     private void calculateRowsFromHeight() {
         final int h = term.getClientHeight() - (2 * padding);
         rows = h / fontH;
-
-        getLogger().info("calculateRowsFromHeight: font=" + fontW + "x" + fontH
-                + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
-                + rows + ";size=" + getWidth() + "x" + getHeight());
     }
 
     private void calculateColsFromWidth() {
@@ -390,23 +379,19 @@ public class TextConsole extends FocusWidget {
         cols = (w - 2 * paddingW) / fontW;
         buffer.getStyle().setWidth((cols * fontW), Unit.PX);
         prompt.getStyle().setWidth((cols * fontW), Unit.PX);
-        getLogger().info("calculateColsFromWidth: font=" + fontW + "x" + fontH
-                + ";scrollbar=" + scrollbarW + ";cols=" + cols + ";rows="
-                + rows + ";size=" + getWidth() + "x" + getHeight());
     }
 
     @Override
     public void setFocus(final boolean focused) {
-        getLogger().info("setFocus(focused: " + this.focused + " -> " + focused + ")");
+        // getLogger().debug("setFocus(focused: " + this.focused + " -> " + focused + ")");
         this.focused = focused;
         ensureFocus();
     }
 
     private void ensureFocus() {
-        getLogger().info("ensureFocus(focused: " + focused + ")");
+        // getLogger().debug("ensureFocus(focused: " + focused + ")");
         if (focused) {
             if (isPromptActive()) {
-                getLogger().info("focus input");
                 input.focus();
 
                 // Focus to end
@@ -415,7 +400,6 @@ public class TextConsole extends FocusWidget {
                     setCursorPosition(s.length());
                 }
             } else {
-                getLogger().info("focus term");
                 super.setFocus(true);
             }
         }
@@ -443,14 +427,6 @@ public class TextConsole extends FocusWidget {
         while (buffer.hasChildNodes()) {
             buffer.removeChild(buffer.getFirstChild());
         }
-    }
-
-    public String getHeight() {
-        return (term.getClientHeight() - 2 * padding) + "px";
-    }
-
-    public String getWidth() {
-        return (term.getClientWidth() + scrollbarW - 2 * paddingW) + "px";
     }
 
     protected void bell() {
@@ -501,9 +477,9 @@ public class TextConsole extends FocusWidget {
         init();
     }
 
-    private static Logger getLogger() {
-        return Logger.getLogger(TextConsole.class.getName());
-    }
+//    private static Logger getLogger() {
+//        return Logger.getLogger(TextConsole.class.getName());
+//    }
 
     public void resized() {
         calculateColsFromWidth();
@@ -512,12 +488,12 @@ public class TextConsole extends FocusWidget {
     }
 
     public void setScrollLock(boolean scrollLock) {
-        getLogger().info("setScrollLock: scrollLock=" + scrollLock);
+        // getLogger().debug("setScrollLock: scrollLock=" + scrollLock);
         this.scrollLock = scrollLock;
     }
 
     public void setWrap(boolean wrap) {
-        getLogger().info("setWrap: wrap=" + wrap);
+        // getLogger().debug("setWrap: wrap=" + wrap);
         if (wrap) {
             buffer.addClassName("soft-wrap");
         } else {
@@ -612,7 +588,7 @@ public class TextConsole extends FocusWidget {
             boolean alt = event.isAltKeyDown();
             boolean shift = event.isShiftKeyDown();
             boolean meta = event.isMetaKeyDown();
-            getLogger().info("keyEvent(" + key + ", ctrl: " + ctrl + ", alt: " + alt + ", meta: " + meta + ")");
+            // getLogger().debug("keyEvent(" + key + ", ctrl: " + ctrl + ", alt: " + alt + ", meta: " + meta + ")");
             if (ctrl) {
                 /* Control characters in https://en.wikipedia.org/wiki/C0_and_C1_control_codes */
                 switch (key) {
