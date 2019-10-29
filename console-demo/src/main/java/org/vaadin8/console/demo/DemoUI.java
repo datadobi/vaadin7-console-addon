@@ -12,6 +12,7 @@ import org.vaadin8.console.Console;
 
 import javax.servlet.annotation.WebServlet;
 import java.io.*;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.Executors;
 
@@ -62,7 +63,7 @@ public class DemoUI extends UI {
 	}
 
 	private static class CommandHandler implements org.vaadin8.console.CommandHandler {
-		private static Set<String> validCommands = new HashSet<>(Arrays.asList("ls", "sleep", "echo"));
+		private static Set<String> systemCommands = new HashSet<>(Arrays.asList("ls", "sleep", "echo"));
 
 		@Override
 		public String suggest(List<String> argv) throws Exception {
@@ -71,7 +72,7 @@ public class DemoUI extends UI {
 			}
 
 			String cmd = argv.get(0).toLowerCase();
-			for (String validCommand : validCommands) {
+			for (String validCommand : systemCommands) {
 				if (validCommand.startsWith(cmd.toLowerCase()) && !validCommand.equals(cmd)) {
 					return validCommand;
 				}
@@ -86,8 +87,13 @@ public class DemoUI extends UI {
 			}
 
 			String cmd = argv.get(0);
-			if (validCommands.contains(cmd.toLowerCase())) {
+			if (systemCommands.contains(cmd.toLowerCase())) {
 				executeSystemCommand(argv, out, err);
+			} else if (cmd.equals("clock")) {
+				while(true) {
+					out.println(Instant.now());
+					Thread.sleep(1000);
+				}
 			} else {
 				err.println("command not found: " + cmd);
 			}
@@ -123,8 +129,14 @@ public class DemoUI extends UI {
 
 				outReader.start();
 				errReader.start();
-				outReader.join();
-				errReader.join();
+				try {
+					outReader.join();
+					errReader.join();
+				} catch (InterruptedException e) {
+					outReader.interrupt();
+					errReader.interrupt();
+					throw e;
+				}
 			} finally {
 				process.destroy();
 			}

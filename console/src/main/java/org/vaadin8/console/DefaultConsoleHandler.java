@@ -137,15 +137,21 @@ public class DefaultConsoleHandler implements Handler {
 
 		try {
 			CompletableFuture<String> future = new CompletableFuture<>();
+			ConsoleQueue outputQueue = new ConsoleQueue(console);
 
 			Future<?> taskFuture = executorService.submit(() -> {
-				ConsoleQueue outputQueue = new ConsoleQueue(console);
+				if (future.isCancelled()) {
+					return;
+				}
+
 				Timer t = new Timer();
 				t.schedule(
 						new TimerTask() {
 							@Override
 							public void run() {
-								outputQueue.flush();
+								if (!future.isCancelled()) {
+									outputQueue.flush();
+								}
 							}
 						},
 						250, 250
@@ -168,34 +174,39 @@ public class DefaultConsoleHandler implements Handler {
 					}
 				} finally {
 					t.cancel();
-					outputQueue.flush();
-					future.complete(null);
+					if (!future.isCancelled()) {
+						outputQueue.flush();
+						future.complete(null);
+					}
 				}
 			});
 
 			runningCommand.set(future);
 			future.whenComplete((newPs, throwable) -> {
-				runningCommand.set(null);
-
 				if (future.isCancelled()) {
 					taskFuture.cancel(true);
 
 					ConsoleQueue.run(console, () -> {
+						outputQueue.flushQueue();
 						console.println("<aborted>", errorStyle);
 						console.prompt();
+						runningCommand.set(null);
 					});
 				} else {
 					ConsoleQueue.run(console, () -> {
+						outputQueue.flushQueue();
 						if (newPs != null) {
 							console.setPs(newPs);
 						}
 						console.prompt();
+						runningCommand.set(null);
 					});
 				}
 			});
 		} catch (final Exception e) {
 			console.println(e.getClass().getSimpleName() + ": " + e.getMessage());
 			console.prompt();
+			runningCommand.set(null);
 		}
 	}
 
@@ -293,15 +304,12 @@ public class DefaultConsoleHandler implements Handler {
 			this.workQueue = new ArrayBlockingQueue<>(QUEUE_SIZE);
 		}
 
-		public synchronized void queue(Consumer<Console> task) throws InterruptedIOException {
+		public void queue(Consumer<Console> task) throws InterruptedIOException {
 			try {
 				workQueue.put(task);
 			} catch (InterruptedException e) {
 				throw new InterruptedIOException();
 			}
-//			if (workQueue.size() >= AUTOFLUSH_SIZE) {
-//				flush();
-//			}
 		}
 
 		public void flush() {
