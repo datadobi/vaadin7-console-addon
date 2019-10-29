@@ -5,6 +5,7 @@ import com.vaadin.ui.Component;
 import org.vaadin8.console.client.ConsoleClientRpc;
 import org.vaadin8.console.client.ConsoleServerRpc;
 import org.vaadin8.console.client.ConsoleState;
+import org.vaadin8.console.client.TextConsoleHandler;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -345,8 +346,8 @@ public class Console extends AbstractComponent implements Component.Focusable {
 		}
 
 		@Override
-		public void controlChar(char c) {
-			handler.controlCharReceived(Console.this, c);
+		public void controlChar(String key, int modifiers) {
+			handler.controlCharReceived(Console.this, key, modifiers);
 		}
 
 		@Override
@@ -365,6 +366,11 @@ public class Console extends AbstractComponent implements Component.Focusable {
 	 *
 	 */
 	public interface Handler extends Serializable {
+		int CTRL = TextConsoleHandler.CTRL;
+		int SHIFT = TextConsoleHandler.SHIFT;
+		int ALT = TextConsoleHandler.ALT;
+		int META = TextConsoleHandler.META;
+
 		/**
 		 * Called when user has entered input to the Console and presses enter
 		 * to execute it.
@@ -379,7 +385,7 @@ public class Console extends AbstractComponent implements Component.Focusable {
 		 *
 		 * @param console
 		 */
-		void controlCharReceived(Console console, char c);
+		void controlCharReceived(Console console, String key, int modifiers);
 
 		void clearHistory(Console console);
 

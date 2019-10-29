@@ -18,5 +18,5 @@ public interface ConsoleServerRpc extends ServerRpc {
 
 	void suggest(String input);
 
-	void controlChar(char c);
+	void controlChar(String key, int modifiers);
 }

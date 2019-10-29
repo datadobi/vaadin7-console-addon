@@ -91,8 +91,8 @@ public class ConsoleConnector extends AbstractComponentConnector implements Focu
 			}
 
 			@Override
-			public void controlChar(char c) {
-				rpc.controlChar(c);
+			public void controlChar(String key, int modifiers) {
+				rpc.controlChar(key, modifiers);
 			}
 
 			@Override

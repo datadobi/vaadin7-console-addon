@@ -136,7 +136,9 @@ public class DefaultConsoleHandler implements Handler {
 		}
 
 		try {
-			runningCommand.set(executorService.submit(() -> {
+			CompletableFuture<String> future = new CompletableFuture<>();
+
+			Future<?> taskFuture = executorService.submit(() -> {
 				ConsoleQueue outputQueue = new ConsoleQueue(console);
 				Timer t = new Timer();
 				t.schedule(
@@ -148,15 +150,14 @@ public class DefaultConsoleHandler implements Handler {
 						},
 						250, 250
 				);
-				String newPs = null;
-				boolean aborted = false;
+
 				try {
 					try (PrintWriter out = new PrintWriter(new ConsoleWriter(outputQueue, outputStyle), true);
 						 PrintWriter err = new PrintWriter(new ConsoleWriter(outputQueue, errorStyle), true)) {
 						try {
-							newPs = handler.execute(argv, out, err);
+							future.complete(handler.execute(argv, out, err));
 						} catch (InterruptedException | InterruptedIOException | CancellationException e) {
-							aborted = true;
+							// Ignored
 						} catch (Throwable e) {
 							StringWriter w = new StringWriter();
 							PrintWriter pw = new PrintWriter(w);
@@ -168,21 +169,30 @@ public class DefaultConsoleHandler implements Handler {
 				} finally {
 					t.cancel();
 					outputQueue.flush();
-					runningCommand.set(null);
+					future.complete(null);
+				}
+			});
 
-					boolean finalAborted = aborted;
-					String finalNewPs = newPs;
+			runningCommand.set(future);
+			future.whenComplete((newPs, throwable) -> {
+				runningCommand.set(null);
+
+				if (future.isCancelled()) {
+					taskFuture.cancel(true);
+
 					ConsoleQueue.run(console, () -> {
-						if (finalAborted) {
-							console.println("<aborted>", errorStyle);
-						}
-						if (finalNewPs != null) {
-							console.setPs(finalNewPs);
+						console.println("<aborted>", errorStyle);
+						console.prompt();
+					});
+				} else {
+					ConsoleQueue.run(console, () -> {
+						if (newPs != null) {
+							console.setPs(newPs);
 						}
 						console.prompt();
 					});
 				}
-			}));
+			});
 		} catch (final Exception e) {
 			console.println(e.getClass().getSimpleName() + ": " + e.getMessage());
 			console.prompt();
@@ -190,9 +200,12 @@ public class DefaultConsoleHandler implements Handler {
 	}
 
 	@Override
-	public void controlCharReceived(Console console, char c) {
-		if (c == 'C' || c == '[') {
-			abortCommand();
+	public void controlCharReceived(Console console, String key, int modifiers) {
+		switch (key) {
+			case "Esc":
+			case "Escape":
+				abortCommand();
+				break;
 		}
 	}
 

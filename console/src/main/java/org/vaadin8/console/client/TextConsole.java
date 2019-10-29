@@ -3,40 +3,16 @@ package org.vaadin8.console.client;
 import com.google.gwt.dom.client.*;
 import com.google.gwt.dom.client.Style.Display;
 import com.google.gwt.dom.client.Style.Unit;
-import com.google.gwt.event.dom.client.ClickEvent;
-import com.google.gwt.event.dom.client.KeyCodes;
-import com.google.gwt.event.dom.client.KeyDownEvent;
+import com.google.gwt.event.dom.client.*;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.ui.FocusWidget;
 import com.vaadin.client.Util;
 
+import java.util.*;
 import java.util.logging.Logger;
 
 public class TextConsole extends FocusWidget {
-    /* Control characters in http://en.wikipedia.org/wiki/Control_character */
-
-    private static final char CTRL_END_OF_TEXT = 'C';
-    private static final char CTRL_BELL = 'G';
-    private static final char CTRL_BACKSPACE = 'H';
-    private static final char CTRL_TAB = 'I';
-    private static final char CTRL_LINE_FEED = 'J';
-    private static final char CTRL_FORM_FEED = 'L';
-    private static final char CTRL_CARRIAGE_RETURN = 'M';
-    private static final char CTRL_ESCAPE = '[';
-    private static final char CTRL_DELETE = '?';
-
-    private static final char[] CTRL = {CTRL_BELL, CTRL_BACKSPACE, CTRL_TAB, CTRL_LINE_FEED, CTRL_FORM_FEED, CTRL_CARRIAGE_RETURN, CTRL_ESCAPE, CTRL_DELETE, CTRL_END_OF_TEXT};
-
-    private static char getControlKey(final int kc) {
-        for (final char c : CTRL) {
-            if (kc == c) {
-                return c;
-            }
-        }
-        return 0;
-    }
-
     private static final String DEFAULT_TABS = "    ";
     private static final int BIG_NUMBER = 100000;
 
@@ -48,8 +24,7 @@ public class TextConsole extends FocusWidget {
     private final TableElement prompt;
     private final Element ps;
     private final InputElement input;
-    private HandlerRegistration clickHandler;
-    private HandlerRegistration keyHandler;
+    private List<HandlerRegistration> handlers = new ArrayList<>();
     private int fontW = -1;
     private int fontH = -1;
     private int scrollbarW = -1;
@@ -123,84 +98,22 @@ public class TextConsole extends FocusWidget {
     }
 
     private void registerHandlersIfNeeded() {
-        if (clickHandler == null) {
-            clickHandler = addDomHandler(event -> setFocus(true), ClickEvent.getType());
+        if (!handlers.isEmpty()) {
+            return;
         }
 
-        if (keyHandler == null) {
-            keyHandler = addDomHandler(event -> {
-                getLogger().info("keyEvent(" + event.getNativeKeyCode()
-                        + ", ctrl: " + event.isControlKeyDown()
-                        + ", alt: " + event.isAltKeyDown()
-                        + ", meta: " + event.isMetaKeyDown()
-                        + ")");
-                if (event.getNativeEvent().getCtrlKey()) {
-                    final char ctrlChar = getControlKey(event.getNativeKeyCode());
-                    if (ctrlChar > 0) {
-                        event.preventDefault();
-                        handleControlChar(ctrlChar);
-                    }
-                } else if (event.getNativeKeyCode() == KeyCodes.KEY_ESCAPE) {
-                    event.preventDefault();
-                    handleControlChar(CTRL_ESCAPE);
-                } else if (!isPromptActive()) {
-                    event.preventDefault();
-                } else if (event.getNativeKeyCode() == KeyCodes.KEY_ENTER) {
-                    event.preventDefault();
-                    carriageReturn();
-                } else if (event.getNativeKeyCode() == KeyCodes.KEY_UP || event.getNativeKeyCode() == KeyCodes.KEY_DOWN) {
-                    event.preventDefault();
-                    handleCommandHistoryBrowse(event.getNativeKeyCode());
-                } else if (event.getNativeKeyCode() == KeyCodes.KEY_TAB) {
-					event.preventDefault();
-                    handleSuggest();
-                    handleSuggest();
-                } else if (event.getNativeKeyCode() == KeyCodes.KEY_BACKSPACE && getInputLength() == 0) {
-                    bell();
-                }
-            }, KeyDownEvent.getType());
-        }
-    }
+        MouseClickHandler mouseHandler = new MouseClickHandler(event -> {
+            getLogger().info("clicked()");
+            setFocus(true);
+        });
 
-    private void handleControlChar(final char c) {
-        switch (c) {
-            case TextConsole.CTRL_BACKSPACE:
-                backspace();
-                break;
-            case TextConsole.CTRL_BELL:
-                bell();
-                break;
-            case TextConsole.CTRL_CARRIAGE_RETURN:
-            case TextConsole.CTRL_LINE_FEED:
-                carriageReturn();
-                break;
-            case TextConsole.CTRL_DELETE:
-            case TextConsole.CTRL_FORM_FEED:
-                bell();
-                break;
-            case TextConsole.CTRL_TAB:
-                tab();
-                break;
-            default:
-                controlChar(c);
-                break;
-        }
-    }
+        handlers.add(addDomHandler(mouseHandler, ClickEvent.getType()));
+        handlers.add(addDomHandler(mouseHandler, MouseDownEvent.getType()));
+        handlers.add(addDomHandler(mouseHandler, MouseUpEvent.getType()));
+        handlers.add(addDomHandler(mouseHandler, MouseMoveEvent.getType()));
+        handlers.add(addDomHandler(mouseHandler, MouseOutEvent.getType()));
 
-    protected void controlChar(char c) {
-        handler.controlChar(c);
-    }
-
-    private void handleCommandHistoryBrowse(final int i) {
-        if (i == KeyCodes.KEY_UP) {
-            handler.previousCommand();
-        } else {
-            handler.nextCommand();
-        }
-    }
-
-    private void handleSuggest() {
-        handler.suggest(getInput());
+        handlers.add(addDomHandler(new KeyHandler(), KeyDownEvent.getType()));
     }
 
     public String getInput() {
@@ -230,8 +143,7 @@ public class TextConsole extends FocusWidget {
 
     void carriageReturn() {
         String lineBuffer = getInput();
-		handler.terminalInput(this, lineBuffer);
-        setFocus(true);
+        handler.terminalInput(this, lineBuffer);
     }
 
     private boolean bufferIsEmpty() {
@@ -305,26 +217,30 @@ public class TextConsole extends FocusWidget {
     }
 
     private boolean bufferEndsWithNewLine() {
-		Node last = getLastBufferChild();
-		return last != null && "br".equals(last.getNodeName().toLowerCase());
+        Node last = getLastBufferChild();
+        return last != null && "br".equals(last.getNodeName().toLowerCase());
     }
 
-	private Element getCurrentSpan() {
-		Node last = getLastBufferChild();
-		if (last != null && last.getNodeType() == Node.ELEMENT_NODE && "span".equals(last.getNodeName().toLowerCase())) {
-			return (Element)last;
-		} else {
-			return null;
-		}
-	}
+    private Element getCurrentSpan() {
+        Node last = getLastBufferChild();
+        if (last != null && last.getNodeType() == Node.ELEMENT_NODE && "span".equals(last.getNodeName().toLowerCase())) {
+            return (Element) last;
+        } else {
+            return null;
+        }
+    }
 
-	private Node getLastBufferChild() {
-		Node last = buffer != null ? buffer.getLastChild() : null;
-		while (last != null && last.getLastChild() != null) {
-			last = last.getLastChild();
-		}
-		return last;
-	}
+    private Node getLastBufferChild() {
+        Node last = buffer != null ? buffer.getLastChild() : null;
+        while (last != null && last.getLastChild() != null) {
+            last = last.getLastChild();
+        }
+        return last;
+    }
+
+    private void setCursorPosition(int position) {
+        setSelectionRange(input, position, position);
+    }
 
     private native void setSelectionRange(Element input, int selectionStart, int selectionEnd)/*-{
         if (input.setSelectionRange) {
@@ -365,19 +281,23 @@ public class TextConsole extends FocusWidget {
         return w1 - w2;
     }-*/;
 
+    private native String getKey(NativeEvent evt) /*-{
+        return evt.key;
+    }-*/;
+
     public void newLine() {
         getLogger().info("newline");
         beforeChangeTerminal();
-		appendNewLine();
-		checkBufferLimit();
-		scrollToEnd();
+        appendNewLine();
+        checkBufferLimit();
+        scrollToEnd();
     }
 
-	private void appendNewLine() {
-		buffer.appendChild(Document.get().createBRElement());
-	}
+    private void appendNewLine() {
+        buffer.appendChild(Document.get().createBRElement());
+    }
 
-	public void newLineIfNotEndsWithNewLine() {
+    public void newLineIfNotEndsWithNewLine() {
         if (!bufferIsEmpty() && !bufferEndsWithNewLine()) {
             newLine();
         }
@@ -409,46 +329,42 @@ public class TextConsole extends FocusWidget {
     }
 
     public void print(String string) {
-		printWithClass(string, null);
+        printWithClass(string, null);
     }
 
     public void printWithClass(String string, String className) {
-    	if (string == null) {
-    		return;
-		}
+        if (string == null) {
+            return;
+        }
 
         beforeChangeTerminal();
 
-    	string = string.replaceAll("\t", tabs);
+        string = string.replaceAll("\t", tabs);
 
-		Element span = getCurrentSpan();
-		if (span == null || !isSameClass(span.getClassName(), className)) {
-			span = Document.get().createElement("span");
-			span.appendChild(Document.get().createTextNode(""));
-			if (className != null) {
-				span.addClassName(className);
-			}
+        Element span = getCurrentSpan();
+        if (span == null || !isSameClass(span.getClassName(), className)) {
+            span = Document.get().createElement("span");
+            span.appendChild(Document.get().createTextNode(""));
+            if (className != null) {
+                span.addClassName(className);
+            }
             buffer.appendChild(span);
-		}
+        }
 
-		Text text = (Text) span.getChild(0);
-		text.insertData(text.getLength(), string);
+        Text text = (Text) span.getChild(0);
+        text.insertData(text.getLength(), string);
 
-		scrollToEnd();
+        scrollToEnd();
     }
 
-	private boolean isSameClass(String class1, String class2) {
-    	if (class1 == null) {
-    		class1 = "";
-		}
-		if (class2 == null) {
-			class2 = "";
-		}
-		return class1.equals(class2);
-	}
-
-	private String getCurrentPromptContent() {
-        return prompt.getInnerText() + getInput();
+    private boolean isSameClass(String class1, String class2) {
+        if (class1 == null) {
+            class1 = "";
+        }
+        if (class2 == null) {
+            class2 = "";
+        }
+        return class1.equals(class2);
     }
 
     private void checkBufferLimit() {
@@ -481,22 +397,26 @@ public class TextConsole extends FocusWidget {
 
     @Override
     public void setFocus(final boolean focused) {
+        getLogger().info("setFocus(focused: " + this.focused + " -> " + focused + ")");
         this.focused = focused;
         ensureFocus();
     }
 
     private void ensureFocus() {
+        getLogger().info("ensureFocus(focused: " + focused + ")");
         if (focused) {
             if (isPromptActive()) {
+                getLogger().info("focus input");
                 input.focus();
 
                 // Focus to end
                 final String s = getInput();
                 if (s != null && s.length() > 0) {
-                    setSelectionRange(input, s.length(), s.length());
+                    setCursorPosition(s.length());
                 }
             } else {
-                term.focus();
+                getLogger().info("focus term");
+                super.setFocus(true);
             }
         }
     }
@@ -569,14 +489,10 @@ public class TextConsole extends FocusWidget {
     protected void onUnload() {
         super.onUnload();
 
-        if (clickHandler != null) {
-            clickHandler.removeHandler();
-            clickHandler = null;
+        for (HandlerRegistration h : handlers) {
+            h.removeHandler();
         }
-        if (keyHandler != null) {
-            keyHandler.removeHandler();
-            keyHandler = null;
-        }
+        handlers.clear();
     }
 
     @Override
@@ -606,6 +522,165 @@ public class TextConsole extends FocusWidget {
             buffer.addClassName("soft-wrap");
         } else {
             buffer.removeClassName("soft-wrap");
+        }
+    }
+
+    private class MouseClickHandler implements MouseDownHandler, MouseUpHandler, MouseMoveHandler, MouseOutHandler, ClickHandler {
+        private final int mouseButton;
+        private final ClickHandler delegate;
+
+        private boolean down;
+        private boolean ignoreClick;
+        private int downX;
+        private int downY;
+        private int distThreshold;
+
+        private MouseClickHandler(ClickHandler delegate) {
+            mouseButton = NativeEvent.BUTTON_LEFT;
+            distThreshold = 3 * 3;
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void onClick(ClickEvent clickEvent) {
+            if (clickEvent.getNativeButton() != mouseButton) {
+                return;
+            }
+
+            if (ignoreClick) {
+                return;
+            }
+
+            delegate.onClick(clickEvent);
+        }
+
+        @Override
+        public void onMouseDown(MouseDownEvent mouseDownEvent) {
+            if (mouseDownEvent.getNativeButton() != mouseButton) {
+                return;
+            }
+
+            down = true;
+            ignoreClick = false;
+            downX = mouseDownEvent.getClientX();
+            downY = mouseDownEvent.getClientY();
+        }
+
+        @Override
+        public void onMouseUp(MouseUpEvent mouseUpEvent) {
+            if (mouseUpEvent.getNativeButton() != mouseButton) {
+                return;
+            }
+
+            down = false;
+        }
+
+        @Override
+        public void onMouseMove(MouseMoveEvent mouseMoveEvent) {
+            if (!down) {
+                return;
+            }
+
+            int x = mouseMoveEvent.getClientX();
+            int y = mouseMoveEvent.getClientY();
+            int dx = x - downX;
+            int dy = y - downY;
+            int distSquared = dx * dx + dy * dy;
+            if (distSquared > distThreshold) {
+                ignoreClick = true;
+            }
+        }
+
+        @Override
+        public void onMouseOut(MouseOutEvent mouseOutEvent) {
+            if (down) {
+                ignoreClick = true;
+            }
+        }
+    }
+
+    private static final Set<String> SPECIAL_KEYS = new HashSet<>(Arrays.asList(
+            "Esc", "Escape", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", "F19"
+    ));
+
+    private class KeyHandler implements KeyDownHandler {
+
+        @Override
+        public void onKeyDown(KeyDownEvent event) {
+            String key = TextConsole.this.getKey(event.getNativeEvent());
+            boolean ctrl = event.isControlKeyDown();
+            boolean alt = event.isAltKeyDown();
+            boolean shift = event.isShiftKeyDown();
+            boolean meta = event.isMetaKeyDown();
+            getLogger().info("keyEvent(" + key + ", ctrl: " + ctrl + ", alt: " + alt + ", meta: " + meta + ")");
+            if (ctrl) {
+                /* Control characters in https://en.wikipedia.org/wiki/C0_and_C1_control_codes */
+                switch (key) {
+                    case "a":
+                        event.preventDefault();
+                        setCursorPosition(0);
+                        return;
+                    case "e":
+                        event.preventDefault();
+                        setCursorPosition(TextConsole.this.getInputLength());
+                        return;
+                    case "h":
+                    case "?":
+                    case "g":
+                        bell();
+                        return;
+                    case "m":
+                    case "j":
+                    case "k":
+                        carriageReturn();
+                        return;
+                    case "l":
+                        clearBuffer();
+                        return;
+                    case "i":
+                        tab();
+                        return;
+                    case "[":
+                        handler.controlChar("Escape", 0);
+                        return;
+                }
+            }
+
+            switch (key) {
+                case "Enter":
+                    event.preventDefault();
+                    TextConsole.this.carriageReturn();
+                    break;
+                case "Up":
+                case "ArrowUp":
+                    event.preventDefault();
+                    handler.previousCommand();
+                    break;
+                case "Down":
+                case "ArrowDown":
+                    event.preventDefault();
+                    handler.nextCommand();
+                    break;
+                case "Tab":
+                    event.preventDefault();
+                    handler.suggest(TextConsole.this.getInput());
+                    break;
+                case "Backspace":
+                    if (getInputLength() == 0) {
+                        bell();
+                    }
+                    break;
+                default:
+                    if (SPECIAL_KEYS.contains(key)) {
+                        event.preventDefault();
+                        int modifier = 0;
+                        if (shift) modifier |= TextConsoleHandler.SHIFT;
+                        if (ctrl) modifier |= TextConsoleHandler.CTRL;
+                        if (alt) modifier |= TextConsoleHandler.ALT;
+                        if (meta) modifier |= TextConsoleHandler.META;
+                        handler.controlChar(key, modifier);
+                    }
+            }
         }
     }
 }
